@@ -1,0 +1,641 @@
+@Onload
+
+  ShowLayout 2
+
+  Call @PadManagerOnLoad
+
+  step_reso = 8  // Grid/parts per step
+  poly = 6       // Max polyphony per part
+  
+  
+  poly_offset = 0
+  note_pos = 0
+  note_part = 0
+  step = 0
+  pad_edit_step = 0
+
+  // states for UI
+  
+  resetStepOnNewStep = 0
+  pad_edit = 0
+  uiMode = 1 // "Pad mode"
+  if Unassigned record
+    record = 1 // Rec enabled by default
+    transpose = NO
+    transposeNote = 0
+  endif
+
+  PPQN = [8*step_reso, 4*step_reso, 3*step_reso, 2*step_reso, step_reso, step_reso/2, step_reso/4, step_reso/8]
+
+
+  // init knob defaults
+  if Unassigned currentDivisor
+    currentDivisor = 0
+    count = 1
+    tickCounter = 0
+    gate = 0.75
+    swing = 0
+  endif
+
+  SetKnobValue 0, 0
+  SetKnobValue 1, 0
+  SetKnobValue 2, 100
+  SetKnobValue 3, 64
+
+  call @ComputeTimes
+
+  Call @InitPatterns
+  Call @InitSequencer
+  if Unassigned last_active_pattern
+    last_active_pattern = 1
+  endif
+  if Unassigned active_pattern
+    active_pattern = 1
+  endif
+  Call @SetActivePattern
+
+  call @UpdateGUI
+
+@End
+
+@InitSequencer
+  if Unassigned notes
+    FillArray notes, -1 // clear our notes buffer
+    FillArray velocity, 0 // clear the velocity buffer
+    FillArray polycount, 0
+  endif
+@End
+
+@InitPatterns
+  if Unassigned pat1_notes
+    FillArray pat1_notes, -1 // clear our notes buffer
+    FillArray pat1_velocity, 0 // clear the velocity buffer
+    FillArray pat1_polycount, 0
+  endif
+
+  if Unassigned pat2_notes
+    FillArray pat2_notes, -1 // clear our notes buffer
+    FillArray pat2_velocity, 0 // clear the velocity buffer
+    FillArray pat2_polycount, 0
+  endif
+  
+  if Unassigned pat3_notes
+    FillArray pat3_notes, -1 // clear our notes buffer
+    FillArray pat3_velocity, 0 // clear the velocity buffer
+    FillArray pat3_polycount, 0
+  endif
+  
+  if Unassigned pat4_notes
+    FillArray pat4_notes, -1 // clear our notes buffer
+    FillArray pat4_velocity, 0 // clear the velocity buffer
+    FillArray pat4_polycount, 0
+   endif
+@End
+
+@SetActivePattern
+  if last_active_pattern = 1
+    CopyArray notes, pat1_notes
+    CopyArray velocity, pat1_velocity
+    CopyArray polycount, pat1_polycount
+  elseif last_active_pattern = 2
+    CopyArray notes, pat2_notes
+    CopyArray velocity, pat2_velocity
+    CopyArray polycount, pat2_polycount
+  elseif last_active_pattern = 3
+    CopyArray notes, pat3_notes
+    CopyArray velocity, pat3_velocity
+    CopyArray polycount, pat3_polycount
+  elseif last_active_pattern = 4
+    CopyArray notes, pat4_notes
+    CopyArray velocity, pat4_velocity
+    CopyArray polycount, pat4_polycount
+  endif
+
+  if active_pattern = 1
+    CopyArray pat1_notes, notes
+    CopyArray pat1_velocity, velocity
+    CopyArray pat1_polycount, polycount
+  elseif active_pattern = 2
+    CopyArray pat2_notes, notes
+    CopyArray pat2_velocity, velocity
+    CopyArray pat2_polycount, polycount
+  elseif active_pattern = 3
+    CopyArray pat3_notes, notes
+    CopyArray pat3_velocity, velocity
+    CopyArray pat3_polycount, polycount
+  elseif active_pattern = 4
+    CopyArray pat4_notes, notes
+    CopyArray pat4_velocity, velocity
+    CopyArray pat4_polycount, polycount
+  endif
+
+  Call @UpdateGUI
+@End
+
+
+@OnMetroPulse 
+
+  Call @IncrementSequencer
+  step_part = RoundDown(tickCounter / countPerStep) * step_reso
+  note_part = step * step_reso + step_part // The note location in the wide grid
+  note_pos =  note_part * poly 
+
+  nn = notes[note_pos]
+ 
+  if nn >= 0 
+    the_transposeNote = 0
+    if transpose 
+      the_transposeNote = transposeNote
+    endif
+    for po = 0 to polycount[note_part]
+      nn = notes[note_pos + po] + the_transposeNote
+      v = velocity[note_pos + po]
+  
+      SendMIDINoteOn 0, nn, v
+      SendMIDINoteOff 0, nn, 0, noteTime
+    endfor
+  endif
+
+  FlashPad step
+
+@End
+
+@OnShiftDown
+  uiMode = 2 // "button" mode
+  Call @UpdateGUI
+@End 
+
+@OnShiftUp
+  uiMode = 1 // pad mode
+  Call @UpdateGUI
+@End 
+
+@OnPadHold
+  pad_edit_step = pad
+  pad_edit = 1
+  pad_edit_part = 0
+  Log {Pad held: }, pad
+  LabelPad pad, {Editing...} 
+  Call @UpdateGUI
+@End
+
+
+@OnPadSingleTap // param: pad
+
+  if uiMode = 1 and pad_edit = 1
+    pad_edit_part = pad % step_reso // Only step_reso parts
+    pad_edit_part_pad = pad // for UI usage like latching pad etc during edit
+    LabelPad pad, { Edit }
+    LabelPads {Editing step:part -- }, pad_edit_step, {:} , pad_edit_part
+
+  elseif uiMode = 1  // pads
+    Log {Pad singletapped: }, pad
+    reset_step = pad
+    resetStepOnNewStep = 1
+    
+  elseif uiMode = 2 // buttons
+    
+    if pad = 0 // Transpose
+      transpose = not transpose
+      LabelPad 0, { Transpose: }, transpose
+
+      if transpose = 0
+        LabelPads { Hello }
+      endif
+
+    elseif pad = 1 // Erase All
+      Call @InitSequencer    
+      
+    elseif pad = 2 // Record
+      record = not record
+      LabelPad 2, { Rec: }, record
+  
+    elseif pad = 3 // Dump
+      Call @DumpNotes
+    
+    elseif pad = 8 // Pattern 1
+      last_active_pattern = active_pattern
+      active_pattern = 1
+      Call @SetActivePattern
+ 
+    elseif pad = 9 // Pattern 2
+      last_active_pattern = active_pattern
+      active_pattern = 2
+      Call @SetActivePattern
+ 
+    elseif pad = 10 // Pattern 3
+      last_active_pattern = active_pattern
+      active_pattern = 3
+      Call @SetActivePattern
+
+    elseif pad = 11 // Pattern 4
+      last_active_pattern = active_pattern
+      active_pattern = 4
+      Call @SetActivePattern
+
+    endif
+  endif
+@End
+
+@DumpNotes
+
+  for stp = 0 to 15
+    for stp_p = 0 to step_reso - 1
+      stp_notepart = stp * step_reso + stp_p
+      stp_notepos = stp_notepart * poly
+      if notes[stp_notepos] >= 0
+        for stp_pn = 0 to polycount[stp_notepart] - 1
+           Log { Step: }, stp, { Part: }, stp_p, { Note: }, NoteName notes[stp_notepos + stp_pn]
+        endfor
+      endif
+    endfor  
+  endfor
+
+@End
+
+@OnPadDoubleTap
+
+  if pad_edit = 1
+    del_step_part = pad % 8
+    del_step = pad_edit_step
+    del_step_pos = (del_step * step_reso + del_step_part) * poly // The note location in the wide grid
+
+    for po = 0 to poly
+      notes[del_step_pos + po] = -1   // erase part when shift pressed  
+    endfor
+
+    del_note_part = del_step * step_reso + del_step_part // The note location in the wide grid
+
+    polycount[del_note_part] = 0
+  
+    LatchPad pad, 0
+    LabelPad pad, { }
+        
+  else
+    del_step = pad
+    del_step_pos = del_step * step_reso * poly // The note location in the wide grid
+
+    for po = 0 to step_reso * poly
+      notes[del_step_pos + po] = -1   // erase step when shift pressed  
+    endfor
+
+    del_note_part = del_step * step_reso // The note location in the wide grid
+
+    for po = 0 to step_reso
+      polycount[del_note_part + po] = 0
+    endfor
+  
+    LatchPad del_step, 0
+    LabelPad del_step, { }
+  endif
+@End
+
+@OnHostStart
+  step = 0
+  note_pos = 0
+  note_part = 0  
+  tickCounter = 0
+@End 
+
+@OnMidiNoteOn
+
+  log {Midi Note On: }, MIDINote, { Vel: }, MIDIVelocity
+  nn = MIDINote
+  v = MIDIVelocity
+
+  if transpose AND pad_edit <> 1 
+    transposeNote = MIDINote - 48
+    LabelPads { Transpose: }, transposeNote
+    Exit
+  endif
+  
+  SendMIDINoteOn 0, nn, v
+  SendMIDINoteOff 0, nn, 0, noteTime
+
+  if not record  
+    Exit
+  endif
+  
+  if pad_edit = 1
+
+    pad_note_part = pad_edit_step * step_reso + pad_edit_part // The note location for the pad being edited. 
+    pad_note_pos =  pad_note_part * poly
+
+    the_step = pad_edit_step
+    the_note_pos = pad_note_pos
+    the_note_part = pad_note_part
+ 
+    if not Unassigned pad_edit_part_pad  // Latch and label when editing parts of step
+      LabelPad pad_edit_part_pad, nn
+      LatchPad pad_edit_part_pad, 1
+    endif
+  else
+    the_step = step
+    the_note_pos = note_pos
+    the_note_part = note_part
+  endif
+  
+  poly_offset = polycount[the_note_part]
+ 
+  notes[the_note_pos+poly_offset] = nn 
+  velocity[the_note_pos+poly_offset] = v
+
+  if poly_offset < 8
+    Inc poly_offset
+  endif
+  polycount[the_note_part] = poly_offset
+
+  LabelPad the_step, poly_offset, {:}, (NoteName nn, YES) 
+  Log {CPS: }‚ countPerStep, {tickCounter: }, tickCounter, { step: }, step,{ note_part: }, note_part, { note_pos: }, note_pos, { Note: }, (Notename nn, YES)
+
+  last_note = nn      // for single-tap edit
+  last_velocity = nn  
+
+@End 
+
+
+@IncrementSequencer
+  Inc tickCounter
+  if tickCounter >= countPerStep
+    tickCounter = 0
+    
+    if resetStepOnNewStep = 1
+      resetStepOnNewStep = 0
+      step = reset_step
+    else
+      Inc step
+      if step > 15
+        step = 0
+      endif
+    endif
+  endif
+@End 
+
+@OnKnobChange
+  currentDivisor = Round ((GetKnobValue 0) / 16)
+  count = Round (((GetKnobValue 1)) / 4) + 1
+  gate = (GetKnobValue 2) / 100
+  swing = (GetKnobValue 3) / 127
+
+  call @ComputeTimes
+  call @UpdateGUI
+@End
+
+
+@ComputeTimes
+  stepTime = QuarterNote / PPQN[currentDivisor] * step_reso * count
+
+  countPerStep = step_reso // PPQN[currentDivisor] / step_reso * metroBaseMultiple[currentDivisor] * count 
+  
+  noteTime = stepTime * gate
+  Log {ComputeTimes: }, {stepTime: }, stepTime, { noteTime: }, noteTime, { ppqn: }, PPQN[currentDivisor], { CPS: }, countPerStep
+  SetMetroPPQN PPQN[currentDivisor]
+@End
+
+
+@UpdateGUI
+  if uiMode = 1 AND pad_edit = 1
+    call @GUI_PadEditMode
+    LabelPads {Editing step:part -- }, pad_edit_step, {:} , pad_edit_part
+
+  elseif uiMode = 1
+    call @GUI_PadMode
+    LabelPads {Rec: }, record, { Transpose: }, transpose
+
+  elseif uiMode = 2
+    call @GUI_ButtonMode 
+    LabelPads {Menu}
+  endif
+@End
+
+@GUI_PadEditMode
+  if pad_edit_step <= 7
+    for the_part = 0 to step_reso
+      _cnt = polycount[pad_edit_step * step_reso + the_part]
+      LabelPad (the_part + 8), _cnt, {:}, notes[pad_edit_step * step_reso * poly + the_part * poly]
+      if _cnt > 0
+        LatchPad (the_part + 8), 1
+      else
+        LatchPad (the_part + 8), 0
+      endif
+    endfor
+  else
+    for the_part = 0 to step_reso
+      _cnt = polycount[pad_edit_step * step_reso + the_part]
+      LabelPad the_part, _cnt, {:}, notes[pad_edit_step * step_reso * poly + the_part * poly]
+      if _cnt > 0
+        LatchPad (the_part), 1
+      else
+        LatchPad (the_part), 0
+      endif
+    endfor  
+  endif
+@End
+
+@GUI_ButtonMode
+  
+  for po = 0 to 15
+    LabelPad po, { }
+    LatchPad po, 0
+  endfor
+      
+  LabelPad 0, { Transpose: }, transpose
+  LabelPad 1, { Clear all }
+  LabelPad 2, { Rec: }, record
+  LabelPad 3, { Dump }
+  
+  LabelPad 8, { Pattern 1}
+  LabelPad 9, { Pattern 2}
+  LabelPad 10, { Pattern 3}
+  LabelPad 11, { Pattern 4}
+  
+  LatchPad 7+active_pattern, 1
+
+@End
+
+@GUI_PadMode
+  if currentDivisor = 0
+    LabelKnob 0, {1/32}
+  elseif currentDivisor = 1
+    LabelKnob 0, {1/16}
+  elseif currentDivisor = 2
+    LabelKnob 0, {1/8t}
+  elseif currentDivisor = 3
+    LabelKnob 0, {1/8}
+  elseif currentDivisor = 4
+    LabelKnob 0, {1/4}
+  elseif currentDivisor = 5
+    LabelKnob 0, {1/2}
+  elseif currentDivisor = 6
+    LabelKnob 0, {bar}
+  elseif currentDivisor = 7
+    LabelKnob 0, {2 bar}
+  endif
+  LabelKnob 1, {x}, count
+  LabelKnob 2, (Round gate*1000)/10, {%}
+
+  for po = 0 to 15
+    stp_cnt = 0
+    for stp = 0 to step_reso-1
+      stp_cnt = stp_cnt + polycount[po * step_reso + stp]
+    endfor
+    LabelPad po, stp_cnt
+    if stp_cnt > 0
+      LatchPad po, 1
+    else
+      LatchPad po, 0
+    endif
+  endfor
+
+@End
+
+@PadManagerOnLoad
+  
+  // The following vars CAN be set before @InitPadManager. 
+  // If they are not defined here, they will be automatically 
+  // defined with their defaults in @InitPadManager
+  //
+  // In the most basic use-case, just Call @InitPadManager 
+  // in your OnLoad without setting any of them. 
+  
+  pmAnalyseTime = 150 
+  // Length of double tap / tap-and-hold time window in msec
+    
+  pmManageTimer = YES
+  // Set to NO if your script wants to controll the timer.
+  // Your timer needs to run continously and with an update
+  // interval faster than 50, otherwise the pad manager 
+  // won't work. Also set pmTickInterval accordingly.
+
+  pmTickInterval = 50
+  // Update interval for the timer in msec.
+
+  //  pmExcludePads = [7,15]
+  pmExcludeCnt = 0
+  // List of pad ids and length of list to be excluded from
+  // analysis. For these pads OnSingleTap will be called 
+  // immediately in 'OnPadDown' without the analysis delay.
+
+  Call @InitPadManager
+@End
+
+
+
+// ========= Pad Manager V2 =========
+// -ki  01.06.2019
+
+@InitPadManager  
+
+  // Apply defaults, if the vars are not yet defined
+
+  if Unassigned pmAnalyseTime
+    pmAnalyseTime = 200 
+  endif
+  if Unassigned pmManageTimer
+    pmManageTimer = YES
+  endif
+  if Unassigned pmTickInterval
+    pmTickInterval = 25
+  endif
+  if Unassigned pmExcludePads
+    pmExcludePads = []
+  endif
+  if Unassigned pmExcludeCnt
+    pmExcludeCnt = 0
+  endif
+  
+  padsActiveCnt = 0  
+  padMaxId = 15
+  for pad = 0 to padMaxId
+    Call @InitPadState
+  endfor
+
+  if pmExcludeCnt>0
+    for pad = 0 to pmExcludeCnt-1
+      padExclude[ pmExcludePads[pad] ] = YES
+    endfor
+  endif
+
+  padAnalyseTicks = pmAnalyseTime / pmTickInterval
+
+  if pmManageTimer
+    SetTimerInterval pmTickInterval
+  endif
+  
+  Log {PadManager started (},pmExcludeCnt,{ excluded pads, timer=}, pmTickInterval,{msec)}
+@End
+
+@InitPadState // Param: pad
+  padActive[pad] = NO
+  padTicks[pad] = 0
+  padTaps[pad] = 0
+  padHold[pad] = NO
+  padExclude[pad] = NO
+@End
+
+@ReleasePadState // Param: pad
+  Dec padsActiveCnt
+  if pmManageTimer and padsActiveCnt = 0
+    StopTimer 
+  endif
+  Call @InitPadState
+ @End
+
+@OnPadDown 
+  if padExclude[LastPad]
+    pad = LastPad
+    Call @OnPadSingleTap
+  else
+    if pmManageTimer and padsActiveCnt = 0
+      StartTimer 
+    endif
+    if not padActive[LastPad]
+      Inc padsActiveCnt
+      padActive[LastPad] = YES
+    endif
+    inc padTaps[LastPad]
+  endif
+@End 
+
+@OnPadUp 
+  if padTaps[LastPad] = 1 and padTicks[LastPad] < padAnalyseTicks
+    padHold[LastPad] = YES
+  endif
+ 
+  if pad_edit = 1 AND LastPad = pad_edit_step
+    Log { Exiting Pad Edit mode }
+    pad_edit = 0
+    Call @UpdateGUI
+  endif
+@End 
+
+@OnTimer 
+  for pad = 0 to padMaxId
+    if padActive[pad]
+      Inc padTicks[pad]
+
+      if padTicks[pad] > padAnalyseTicks
+        if padTaps[pad] = 1
+          if padHold[pad]
+            Call @OnPadSingleTap
+          else
+            Call @OnPadHold
+          endif
+        else
+            Call @OnPadDoubleTap
+        endif
+
+        Call @ReleasePadState
+      endif
+    endif
+  endfor
+@End 
+
+// <<<<<<<<< end of Pad Manager script code >>>>>
+
+@Description
+  Multi-pattern sequencer for Mozaic.
+  
+  Inspired by OP-Z and https://patchstorage.com/infinity
+  Thanks to -ki for https://patchstorage.com/pad-manager-include
+@End
