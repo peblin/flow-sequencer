@@ -23,6 +23,7 @@
     record = 1 // Rec enabled by default
     transpose = NO
     transposeNote = 0
+    copyPattern = NO
   endif
 
   PPQN = [8*step_reso, 4*step_reso, 3*step_reso, 2*step_reso, step_reso, step_reso/2, step_reso/4, step_reso/8]
@@ -91,36 +92,38 @@
   step_part = RoundDown(tickCounter / countPerStep) * step_reso 
   note_part = (step * step_reso + step_part) // The note location in the wide grid
  
-  if voice1[note_part] >= 0 
+  _note_part = (active_pattern * patterns) + note_part
+
+  if voice1[_note_part] >= 0 
     _transposeNote = 0
     if transpose 
       _transposeNote = transposeNote
     endif
 
-    _polycount = polycount[(active_pattern * patterns) + note_part]
+    _polycount = polycount[_note_part]
     if _polycount > 5
-      SendMIDINoteOn 0, voice6[note_part] + _transposeNote, voice6_velocity[note_part]      
-      SendMIDINoteOff 0, voice6[note_part], 0, noteTime
+      SendMIDINoteOn 0, voice6[_note_part] + _transposeNote, voice6_velocity[_note_part]      
+      SendMIDINoteOff 0, voice6[_note_part], 0, noteTime
     endif
     if _polycount > 4
-      SendMIDINoteOn 0, voice5[note_part] + _transposeNote, voice5_velocity[note_part]      
-      SendMIDINoteOff 0, voice5[note_part], 0, noteTime
+      SendMIDINoteOn 0, voice5[_note_part] + _transposeNote, voice5_velocity[_note_part]      
+      SendMIDINoteOff 0, voice5[_note_part], 0, noteTime
     endif
     if _polycount > 3
-      SendMIDINoteOn 0, voice4[note_part] + _transposeNote, voice4_velocity[note_part]      
-      SendMIDINoteOff 0, voice4[note_part], 0, noteTime
+      SendMIDINoteOn 0, voice4[_note_part] + _transposeNote, voice4_velocity[_note_part]      
+      SendMIDINoteOff 0, voice4[_note_part], 0, noteTime
     endif
     if _polycount > 2
-      SendMIDINoteOn 0, voice3[note_part] + _transposeNote, voice3_velocity[note_part]      
-      SendMIDINoteOff 0, voice3[note_part], 0, noteTime
+      SendMIDINoteOn 0, voice3[_note_part] + _transposeNote, voice3_velocity[_note_part]      
+      SendMIDINoteOff 0, voice3[_note_part], 0, noteTime
     endif
     if _polycount > 1
-      SendMIDINoteOn 0, voice2[note_part] + _transposeNote, voice2_velocity[note_part]      
-      SendMIDINoteOff 0, voice2[note_part], 0, noteTime
+      SendMIDINoteOn 0, voice2[_note_part] + _transposeNote, voice2_velocity[_note_part]      
+      SendMIDINoteOff 0, voice2[_note_part], 0, noteTime
     endif
     if _polycount > 0
-      SendMIDINoteOn 0, voice1[note_part] + _transposeNote, voice1_velocity[note_part]      
-      SendMIDINoteOff 0, voice1[note_part], 1, noteTime
+      SendMIDINoteOn 0, voice1[_note_part] + _transposeNote, voice1_velocity[_note_part]      
+      SendMIDINoteOff 0, voice1[_note_part], 0, noteTime
     endif
   endif
 
@@ -130,11 +133,13 @@
 
 @OnShiftDown
   uiMode = 2 // "button" mode
+  copyPattern = NO
   Call @UpdateGUI
 @End 
 
 @OnShiftUp
   uiMode = 1 // pad mode
+  copyPattern = NO
   Call @UpdateGUI
 @End 
 
@@ -160,7 +165,21 @@
     Log {Pad singletapped: }, pad
     reset_step = pad
     resetStepOnNewStep = 1
+  
+  elseif uiMode = 2 and copyPattern = YES
+    copyPattern = NO
+
+    if pad < 7
+      exit
+    endif
     
+    _pattern = pad - 8
+    
+    CopyArray voice1[(active_pattern * patterns)], voice1[(_pattern * patterns)], patterns
+    CopyArray polycount[(active_pattern * patterns)], polycount[(_pattern * patterns)], patterns
+
+    LabelPad _pattern + 8, {Copied }, active_pattern+1 
+
   elseif uiMode = 2 // buttons
     
     if pad = 0 // Transpose
@@ -180,7 +199,11 @@
   
     elseif pad = 3 // Dump
       Call @DumpNotes
-    
+      
+    elseif pad = 4 // Copy pattern
+      LabelPads { Select pattern to copy active pattern to }
+      copyPattern = YES
+
     elseif pad = 8 // Pattern 1
       last_active_pattern = active_pattern
       active_pattern = 0
@@ -198,8 +221,15 @@
       active_pattern = 3
 
     endif
+    
+    if pad >= 8
+      LatchPad last_active_pattern + 8, 0
+      LatchPad active_pattern + 8, 1
+    endif
   endif
+  
 @End
+
 
 @DumpNotes
 
@@ -272,7 +302,7 @@
     pad_note_part = pad_edit_step * step_reso + pad_edit_part // The note location for the pad being edited. 
 
     _step = pad_edit_step
-    _note_part = pad_note_part
+    _note_part = (active_pattern * patterns) + pad_note_part
  
     if not Unassigned pad_edit_part_pad  // Latch and label when editing parts of step
       LabelPad pad_edit_part_pad, nn
@@ -280,10 +310,10 @@
     endif
   else
     _step = step
-    _note_part = note_part
+    _note_part = (active_pattern * patterns) + note_part
   endif
   
-  _poly_offset = polycount[(active_pattern * patterns) + _note_part]
+  _poly_offset = polycount[_note_part]
  
   if _poly_offset = 0
     voice1[_note_part] = nn
@@ -309,7 +339,7 @@
     Inc _poly_offset
   endif
 
-  polycount[(active_pattern * patterns) + _note_part] = _poly_offset
+  polycount[_note_part] = _poly_offset
 
   LabelPad _step, _poly_offset, {:}, (NoteName nn, YES) 
   Log {CPS: }‚ countPerStep, {tickCounter: }, tickCounter, { step: }, step,{ note_part: }, note_part, { note_pos: }, note_pos, { Note: }, (Notename nn, YES)
@@ -407,6 +437,7 @@
   LabelPad 1, { Clear all }
   LabelPad 2, { Rec: }, record
   LabelPad 3, { Dump }
+  LabelPad 4, { Copy pattern }
   
   LabelPad 8, { Pattern 1}
   LabelPad 9, { Pattern 2}
