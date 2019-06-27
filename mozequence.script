@@ -41,7 +41,7 @@
 
   SetKnobValue 0, 0
   SetKnobValue 1, 64
-  SetKnobValue 2, 100
+  SetKnobValue 2, 127
   SetKnobValue 3, 64
 
   call @ComputeTimes
@@ -84,6 +84,7 @@
     FillArray voice6_velocity, 0 // clear the velocity buffer
     FillArray noteTimeX, 100
     FillArray noteOnTicks, 0
+    FillArray note_probability, 100
 @End
 
 @OnMetroPulse 
@@ -93,8 +94,9 @@
   note_part = (step * step_reso + step_part) // The note location in the wide grid
  
   _note_part = (active_pattern * sizeof_pattern) + note_part
-
-  if voice1[_note_part] >= 0 
+  FlashPad step
+  
+  if voice1[_note_part] >= 0 and ((Random 1, 100) < note_probability[_note_part])
     _transposeNote = 0
     if transpose 
       _transposeNote = transposeNote
@@ -129,7 +131,6 @@
     endif
   endif
 
-  FlashPad step
 
 @End
 
@@ -194,6 +195,7 @@
     CopyArray polycount[_src_pattern_pos], polycount[_dest_pattern_pos], sizeof_pattern
     CopyArray noteTimeX[_src_pattern_pos], noteTimeX[_dest_pattern_pos], sizeof_pattern
     CopyArray noteOnTicks[_src_pattern_pos], noteOnTicks[_dest_pattern_pos], sizeof_pattern
+    CopyArray note_probability[_src_pattern_pos], note_probability[_dest_pattern_pos], sizeof_pattern
 
     LabelPad _pattern + 8, {Copied }, active_pattern+1 
 
@@ -401,20 +403,32 @@
 @End
 
 @OnKnobChange
-  currentDivisor = Round ((GetKnobValue 0) / 16)
-  noteTimeX_knob = Round((GetKnobValue 1) / 127 * 400)  
-  if noteTimeX_knob < 6.25
-    noteTimeX_knob = 6.25     // So noteTimeX_knox will be between 6.25 (equiv of a 1/64 note) and 400 of the note time, scaled down to % (1/100) later
-  endif
-
-  if pad_edit = 1
-    noteTimeX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = noteTimeX_knob
-  else
-    noteTimeX[(active_pattern * sizeof_pattern) + note_part] = noteTimeX_knob
-  endif
+  if LastKnob = 0
+    currentDivisor = Round ((GetKnobValue 0) / 16)
+  elseif LastKnob = 1
+    noteTimeX_knob = Round((GetKnobValue 1) / 127 * 800)  
+    if noteTimeX_knob < 6.25
+      noteTimeX_knob = 6.25     // So noteTimeX_knox will be between 6.25 (equiv of a 1/64 note) and 800 of the note time, scaled down to % (1/100) later
+    endif
   
-  gate = (GetKnobValue 2) / 100
-  swing = (GetKnobValue 3) / 127
+    if pad_edit = 1
+      noteTimeX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = noteTimeX_knob
+    else
+      noteTimeX[(active_pattern * sizeof_pattern) + note_part] = noteTimeX_knob
+    endif
+//  elseif LastKnob = 2  
+//    gate = (GetKnobValue 2) / 100
+  elseif LastKnob = 2  
+    _probability = (GetKnobValue 2) / 127 * 100
+    if pad_edit = 1
+      note_probability[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _probability
+    else
+      note_probability[(active_pattern * sizeof_pattern) + note_part] = _probability
+    endif
+    
+  elseif LastKnob = 3
+    swing = (GetKnobValue 3) / 127
+  endif
 
   call @ComputeTimes
   call @UpdateGUI
