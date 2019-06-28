@@ -1,7 +1,5 @@
 @Onload
-
   ShowLayout 2
-
   Call @PadManagerOnLoad
 
   step_reso = 8  // Grid/parts per step
@@ -37,6 +35,7 @@
     gate = 0.75
     swing = 0
     noteTimeX_knob = 100
+    probability_knob = 100
   endif
 
   SetKnobValue 0, 0
@@ -45,17 +44,21 @@
   SetKnobValue 3, 64
 
   call @ComputeTimes
-
   Call @InitSequencer
+
   if Unassigned last_active_pattern
     last_active_pattern = 1
   endif
-
   active_pattern = 0
 
   call @UpdateGUI
-
 @End
+
+// Refactor pad_edit -> part_edit
+// Break up OnPad events into smaller functions
+// Explicit "mode_pad_edit" mode variables keeping UI state
+// Explicit "end action and return to pad view" call at end of pattern actions (clear, copy etc)
+// Rec should only affect live recording
 
 @InitSequencer
   if Unassigned polycount
@@ -89,7 +92,6 @@
 
 @OnMetroPulse 
 
-  Call @IncrementSequencer
   step_part = RoundDown(tickCounter / countPerStep) * step_reso 
   note_part = (step * step_reso + step_part) // The note location in the wide grid
  
@@ -131,19 +133,25 @@
     endif
   endif
 
+  Call @IncrementSequencer
 
 @End
 
 @OnShiftDown
-  uiMode = 2 // "button" mode
-  copyPattern = NO
+  if uiMode = 1 and pad_edit = 1
+      Log { Exiting Pad Edit mode }
+      pad_edit = 0
+  elseif uiMode = 1
+    uiMode = 2 // "button" mode
+    copyPattern = NO
+  elseif uiMode = 2
+    uiMode = 1 // pad mode
+    copyPattern = NO
+  endif
   Call @UpdateGUI
 @End 
 
 @OnShiftUp
-  uiMode = 1 // pad mode
-  copyPattern = NO
-  Call @UpdateGUI
 @End 
 
 @OnPadHold
@@ -159,16 +167,20 @@
 @OnPadSingleTap // param: pad
 
   if uiMode = 1 and pad_edit = 1
-    pad_edit_part = pad % step_reso // Only step_reso parts
-    pad_edit_part_pad = pad // for UI usage like latching pad etc during edit
-    LabelPad pad, { Edit }
-    LabelPads {Editing step:part -- }, pad_edit_step, {:} , pad_edit_part
-
+    if (pad_edit_step > 7 AND pad > 7) OR (pad_edit_step < 7 AND pad < 7)    // pad and tapped pad are on the same row  
+      Log { Exiting Pad Edit mode }
+      pad_edit = 0
+      Call @UpdateGUI
+    else
+      pad_edit_part = pad % step_reso // Only step_reso parts
+      pad_edit_part_pad = pad // for UI usage like latching pad etc during edit
+      LabelPad pad, { Edit }
+      LabelPads {Editing step:part -- }, pad_edit_step, {:} , pad_edit_part, { -- SHIFT or step pad to exit }
+    endif
   elseif uiMode = 1  // pads
     Log {Pad singletapped: }, pad
     reset_step = pad
     resetStepOnNewStep = 1
-  
   elseif uiMode = 2 and copyPattern = YES
     copyPattern = NO
 
@@ -198,9 +210,7 @@
     CopyArray note_probability[_src_pattern_pos], note_probability[_dest_pattern_pos], sizeof_pattern
 
     LabelPad _pattern + 8, {Copied }, active_pattern+1 
-
   elseif uiMode = 2 // buttons
-    
     if pad = 0 // Transpose
       transpose = not transpose
       LabelPad 0, { Transpose: }, transpose
@@ -239,7 +249,7 @@
       last_active_pattern = active_pattern
       active_pattern = 3
 
-   elseif pad = 12 // Pattern 5
+    elseif pad = 12 // Pattern 5
       last_active_pattern = active_pattern
       active_pattern = 4
  
@@ -327,7 +337,7 @@
 
   SendMidiThru
 
-  if not record  
+  if not record and not pad_edit = 1
     Exit
   endif
   
@@ -396,7 +406,13 @@
   _on_ticks = noteOnTicks[_note_part]
   _off_ticks = total_tickCounter
   _elapsed_ticks = _off_ticks - _on_ticks
-  _elapsed_pct = tickTime * _elapsed_ticks / noteTime * 100
+
+  // Special case if transport is stopped or we have long steps (like 2 bars) we might get 0 ticks so we default to 1 step for these cases.
+  if _elapsed_ticks = 0
+    _elapsed_pct = 100
+  elseif 
+    _elapsed_pct = tickTime * _elapsed_ticks / noteTime * 100
+  endif
 
   Log { Note On: }, _on_ticks, { Off: }, _off_ticks, { Elapsed: }, _elapsed_ticks, { = }, _elapsed_pct
   noteTimeX[_note_part] = _elapsed_pct  // elapsed as percentage of notetime
@@ -425,6 +441,8 @@
     else
       note_probability[(active_pattern * sizeof_pattern) + note_part] = _probability
     endif
+
+    probability_knob = _probability
     
   elseif LastKnob = 3
     swing = (GetKnobValue 3) / 127
@@ -465,7 +483,7 @@
 @UpdateGUI
   if uiMode = 1 AND pad_edit = 1
     call @GUI_PadEditMode
-    LabelPads {Editing step:part -- }, pad_edit_step, {:} , pad_edit_part
+    LabelPads {Editing step:part -- }, pad_edit_step, {:} , pad_edit_part, { -- SHIFT or step pad to exit }
 
   elseif uiMode = 1
     call @GUI_PadMode
@@ -549,7 +567,7 @@
   endif
 
   LabelKnob 1, noteTimeX_knob*1.000
-  LabelKnob 2, (Round gate*1000)/10, {%}
+  LabelKnob 2, Round probability_knob
 @End
 
 @GUI_PadMode
@@ -690,12 +708,7 @@
   if padTaps[LastPad] = 1 and padTicks[LastPad] < padAnalyseTicks
     padHold[LastPad] = YES
   endif
- 
-  if pad_edit = 1 AND LastPad = pad_edit_step
-    Log { Exiting Pad Edit mode }
-    pad_edit = 0
-    Call @UpdateGUI
-  endif
+
 @End 
 
 @OnTimer 
