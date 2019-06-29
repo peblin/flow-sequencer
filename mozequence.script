@@ -6,6 +6,11 @@
   poly = 6       // Max polyphony per part
   sizeof_pattern = 16*8   // Size of storing all step parts in an array
 
+  // CONSTANTS
+
+  UIMODE_PADS = 1
+  UIMODE_BUTTONS = 2
+
   poly_offset = 0
   note_pos = 0
   note_part = 0
@@ -13,16 +18,21 @@
   pad_edit_step = 0
   total_tickCounter = 0  // tracks total ticks since start of transport. might wrap, but that wont kill anyone....i think
 
+  pad_edit_got_note = 1  // to know if a note was received while holding a pad - in which case we can exit pad edit mode on pad release
+  pad_edit_hold = 0  
+
   // states for UI
   
   resetStepOnNewStep = 0
-  pad_edit = 0
-  uiMode = 1 // "Pad mode"
+  uiMode = UIMODE_PADS
+  mode_pad_edit = 0
+  mode_multi_pattern = 0
+  mode_copy_pattern = NO
   if Unassigned record
     record = 1 // Rec enabled by default
     transpose = NO
     transposeNote = 0
-    copyPattern = NO
+    mode_copy_pattern = NO
   endif
 
   PPQN = [8*step_reso, 4*step_reso, 3*step_reso, 2*step_reso, step_reso, step_reso/2, step_reso/4, step_reso/8]
@@ -58,7 +68,9 @@
 // Break up OnPad events into smaller functions
 // Explicit "mode_pad_edit" mode variables keeping UI state
 // Explicit "end action and return to pad view" call at end of pattern actions (clear, copy etc)
-// Rec should only affect live recording
+// + Rec should only affect live recording
+// Active_pattern when we have multi patterns? redundant?
+
 
 @InitSequencer
   if Unassigned polycount
@@ -88,65 +100,75 @@
     FillArray noteTimeX, 100
     FillArray noteOnTicks, 0
     FillArray note_probability, 100
+
+    playing_patterns = [ YES, NO, NO, NO, NO, NO, NO ]
 @End
 
 @OnMetroPulse 
-
+  FlashPad step
   step_part = RoundDown(tickCounter / countPerStep) * step_reso 
   note_part = (step * step_reso + step_part) // The note location in the wide grid
- 
-  _note_part = (active_pattern * sizeof_pattern) + note_part
-  FlashPad step
   
-  if voice1[_note_part] >= 0 and ((Random 1, 100) < note_probability[_note_part])
-    _transposeNote = 0
-    if transpose 
-      _transposeNote = transposeNote
-    endif
+  // ugly, but its late
+  _active_pattern = active_pattern
+  
+  for active_pattern = 0 to 6 
+    if playing_patterns[active_pattern] = YES
+      _note_part = (active_pattern * sizeof_pattern) + note_part
 
-    _polycount = polycount[_note_part]
-    _noteTime = noteTime * (noteTimeX[_note_part] / 100)
+      if voice1[_note_part] >= 0 and ((Random 1, 100) < note_probability[_note_part])
+        _transposeNote = 0
+        if transpose 
+          _transposeNote = transposeNote
+        endif
 
-    if _polycount > 5
-      SendMIDINoteOn 0, voice6[_note_part] + _transposeNote, voice6_velocity[_note_part]      
-      SendMIDINoteOff 0, voice6[_note_part] + _transposeNote, 0, _noteTime
+        _polycount = polycount[_note_part]
+        _noteTime = noteTime * (noteTimeX[_note_part] / 100)
+
+        if _polycount > 5
+          SendMIDINoteOn 0, voice6[_note_part] + _transposeNote, voice6_velocity[_note_part]      
+          SendMIDINoteOff 0, voice6[_note_part] + _transposeNote, 0, _noteTime
+        endif
+        if _polycount > 4
+          SendMIDINoteOn 0, voice5[_note_part] + _transposeNote, voice5_velocity[_note_part]      
+          SendMIDINoteOff 0, voice5[_note_part] + _transposeNote, 0, _noteTime
+        endif
+        if _polycount > 3
+          SendMIDINoteOn 0, voice4[_note_part] + _transposeNote, voice4_velocity[_note_part]      
+          SendMIDINoteOff 0, voice4[_note_part] + _transposeNote, 0, _noteTime
+        endif
+        if _polycount > 2
+          SendMIDINoteOn 0, voice3[_note_part] + _transposeNote, voice3_velocity[_note_part]      
+          SendMIDINoteOff 0, voice3[_note_part] + _transposeNote, 0, _noteTime
+        endif
+        if _polycount > 1
+          SendMIDINoteOn 0, voice2[_note_part] + _transposeNote, voice2_velocity[_note_part]      
+          SendMIDINoteOff 0, voice2[_note_part] + _transposeNote, 0, _noteTime
+        endif
+        if _polycount > 0
+          SendMIDINoteOn 0, voice1[_note_part] + _transposeNote, voice1_velocity[_note_part]      
+          SendMIDINoteOff 0, voice1[_note_part] + _transposeNote, 0, _noteTime
+        endif
+      endif
     endif
-    if _polycount > 4
-      SendMIDINoteOn 0, voice5[_note_part] + _transposeNote, voice5_velocity[_note_part]      
-      SendMIDINoteOff 0, voice5[_note_part] + _transposeNote, 0, _noteTime
-    endif
-    if _polycount > 3
-      SendMIDINoteOn 0, voice4[_note_part] + _transposeNote, voice4_velocity[_note_part]      
-      SendMIDINoteOff 0, voice4[_note_part] + _transposeNote, 0, _noteTime
-    endif
-    if _polycount > 2
-      SendMIDINoteOn 0, voice3[_note_part] + _transposeNote, voice3_velocity[_note_part]      
-      SendMIDINoteOff 0, voice3[_note_part] + _transposeNote, 0, _noteTime
-    endif
-    if _polycount > 1
-      SendMIDINoteOn 0, voice2[_note_part] + _transposeNote, voice2_velocity[_note_part]      
-      SendMIDINoteOff 0, voice2[_note_part] + _transposeNote, 0, _noteTime
-    endif
-    if _polycount > 0
-      SendMIDINoteOn 0, voice1[_note_part] + _transposeNote, voice1_velocity[_note_part]      
-      SendMIDINoteOff 0, voice1[_note_part] + _transposeNote, 0, _noteTime
-    endif
-  endif
+  endfor
+
+  active_pattern = _active_pattern
 
   Call @IncrementSequencer
 
 @End
 
 @OnShiftDown
-  if uiMode = 1 and pad_edit = 1
+  if uiMode = UIMODE_PADS and mode_pad_edit = 1
       Log { Exiting Pad Edit mode }
-      pad_edit = 0
-  elseif uiMode = 1
-    uiMode = 2 // "button" mode
-    copyPattern = NO
-  elseif uiMode = 2
-    uiMode = 1 // pad mode
-    copyPattern = NO
+      mode_pad_edit = 0
+  elseif uiMode = UIMODE_PADS
+    uiMode = UIMODE_BUTTONS // "button" mode
+  elseif uiMode = UIMODE_BUTTONS
+    uiMode = UIMODE_PADS // pad mode
+    mode_copy_pattern = NO
+    mode_multi_pattern = NO
   endif
   Call @UpdateGUI
 @End 
@@ -156,8 +178,10 @@
 
 @OnPadHold
   pad_edit_step = pad
-  pad_edit = 1
-  pad_edit_part = 0
+  mode_pad_edit = 1
+  pad_edit_part = 0 
+  pad_edit_got_note = 0
+  pad_edit_hold = 1
   Log {Pad held: }, pad
   LabelPad pad, {Editing...} 
   Call @UpdateGUI
@@ -166,10 +190,10 @@
 
 @OnPadSingleTap // param: pad
 
-  if uiMode = 1 and pad_edit = 1
+  if uiMode = UIMODE_PADS and mode_pad_edit = 1
     if (pad_edit_step > 7 AND pad > 7) OR (pad_edit_step < 7 AND pad < 7)    // pad and tapped pad are on the same row  
       Log { Exiting Pad Edit mode }
-      pad_edit = 0
+      mode_pad_edit = 0
       Call @UpdateGUI
     else
       pad_edit_part = pad % step_reso // Only step_reso parts
@@ -177,12 +201,20 @@
       LabelPad pad, { Edit }
       LabelPads {Editing step:part -- }, pad_edit_step, {:} , pad_edit_part, { -- SHIFT or step pad to exit }
     endif
-  elseif uiMode = 1  // pads
+//  elseif uiMode = UIMODE_PADS and mode_pad_reset_step = 1 // something like this for a "performance mode"
+    // reset_step = pad
+    // resetStepOnNewStep = 1
+  elseif uiMode = UIMODE_PADS  // pads
     Log {Pad singletapped: }, pad
-    reset_step = pad
-    resetStepOnNewStep = 1
-  elseif uiMode = 2 and copyPattern = YES
-    copyPattern = NO
+
+    pad_edit_step = pad
+    mode_pad_edit = 1
+    pad_edit_part = 0
+    pad_edit_got_note = 0
+    Call @UpdateGUI
+  
+  elseif uiMode = UIMODE_BUTTONS and mode_copy_pattern = YES
+    mode_copy_pattern = NO
 
     if pad < 8
       exit
@@ -210,7 +242,14 @@
     CopyArray note_probability[_src_pattern_pos], note_probability[_dest_pattern_pos], sizeof_pattern
 
     LabelPad _pattern + 8, {Copied }, active_pattern+1 
-  elseif uiMode = 2 // buttons
+  elseif uiMode = UIMODE_BUTTONS and mode_multi_pattern = YES
+    _pattern = pad - 8
+    if _pattern >= 0 // Valid pattern pad
+      playing_patterns[_pattern] = not playing_patterns[_pattern]
+      LatchPad pad, playing_patterns[_pattern]
+    endif
+
+  elseif uiMode = UIMODE_BUTTONS
     if pad = 0 // Transpose
       transpose = not transpose
       LabelPad 0, { Transpose: }, transpose
@@ -231,7 +270,11 @@
       
     elseif pad = 4 // Copy pattern
       LabelPads { Select pattern to copy active pattern to }
-      copyPattern = YES
+      mode_copy_pattern = YES
+
+    elseif pad = 5 // Multi pattern
+      LabelPads { Select patterns to play simultaneously }
+      mode_multi_pattern = YES
 
     elseif pad = 8 // Pattern 1
       last_active_pattern = active_pattern
@@ -267,6 +310,11 @@
       LatchPad last_active_pattern + 8, 0
       LatchPad active_pattern + 8, 1
     endif
+    
+    if mode_copy_pattern <> 1
+      uiMode = UIMODE_PADS
+      Call @UpdateGUI
+    endif
   endif
   
 @End
@@ -285,12 +333,12 @@
       endfor  
     endfor  
   endfor
-
+ 
 @End
 
 @OnPadDoubleTap
 
-  if pad_edit = 1
+  if mode_pad_edit = 1
     del_step_part = pad % 8
     del_step = pad_edit_step
     del_step_pos = del_step * step_reso + del_step_part // The note location in the wide grid
@@ -326,23 +374,21 @@
   nn = MIDINote
   v = MIDIVelocity
 
-  if transpose AND pad_edit <> 1 
+  if transpose AND mode_pad_edit <> 1 
     transposeNote = MIDINote - 48
     LabelPads { Transpose: }, transposeNote
     Exit
   endif
   
-//  SendMIDINoteOn 0, nn, v
-//  SendMIDINoteOff 0, nn, 0, noteTime
-
   SendMidiThru
 
-  if not record and not pad_edit = 1
+  if not record and not mode_pad_edit = 1
     Exit
   endif
   
-  if pad_edit = 1
+  if mode_pad_edit = 1
 
+    pad_edit_got_note = 1
     pad_note_part = pad_edit_step * step_reso + pad_edit_part // The note location for the pad being edited. 
 
     _step = pad_edit_step
@@ -427,7 +473,7 @@
       noteTimeX_knob = 6.25     // So noteTimeX_knox will be between 6.25 (equiv of a 1/64 note) and 800 of the note time, scaled down to % (1/100) later
     endif
   
-    if pad_edit = 1
+    if mode_pad_edit = 1
       noteTimeX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = noteTimeX_knob
     else
       noteTimeX[(active_pattern * sizeof_pattern) + note_part] = noteTimeX_knob
@@ -436,7 +482,7 @@
 //    gate = (GetKnobValue 2) / 100
   elseif LastKnob = 2  
     _probability = (GetKnobValue 2) / 127 * 100
-    if pad_edit = 1
+    if mode_pad_edit = 1
       note_probability[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _probability
     else
       note_probability[(active_pattern * sizeof_pattern) + note_part] = _probability
@@ -481,15 +527,15 @@
 @End
 
 @UpdateGUI
-  if uiMode = 1 AND pad_edit = 1
+  if uiMode = UIMODE_PADS AND mode_pad_edit = 1
     call @GUI_PadEditMode
     LabelPads {Editing step:part -- }, pad_edit_step, {:} , pad_edit_part, { -- SHIFT or step pad to exit }
 
-  elseif uiMode = 1
+  elseif uiMode = UIMODE_PADS
     call @GUI_PadMode
     LabelPads {Rec: }, record, { Transpose: }, transpose
 
-  elseif uiMode = 2
+  elseif uiMode = UIMODE_BUTTONS
     call @GUI_ButtonMode 
     LabelPads {Menu}
   endif
@@ -535,6 +581,7 @@
   LabelPad 2, { Rec: }, record
   LabelPad 3, { Dump }
   LabelPad 4, { Copy pattern }
+  LabelPad 5, { Multi pattern }
   
   LabelPad 8, { Pattern 1}
   LabelPad 9, { Pattern 2}
@@ -709,6 +756,11 @@
     padHold[LastPad] = YES
   endif
 
+  if pad_edit_got_note = 1 OR (pad_edit_hold and pad = pad_edit_step)  // second clause is probably sufficient?!
+    pad_edit_got_note = 0
+    mode_pad_edit = 0
+    Call @UpdateGUI
+  endif
 @End 
 
 @OnTimer 
