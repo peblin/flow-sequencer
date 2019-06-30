@@ -26,7 +26,7 @@
   resetStepOnNewStep = 0
   uiMode = UIMODE_PADS
   mode_pad_edit = 0
-  mode_multi_pattern = 0
+  mode_multi_pattern = YES
   mode_copy_pattern = NO
   if Unassigned record
     record = 1 // Rec enabled by default
@@ -62,6 +62,8 @@
   active_pattern = 0
 
   call @UpdateGUI
+    mode_copy_pattern = NO
+    mode_multi_pattern = NO
 @End
 
 // Refactor pad_edit -> part_edit
@@ -243,10 +245,13 @@
 
     LabelPad _pattern + 8, {Copied }, active_pattern+1 
   elseif uiMode = UIMODE_BUTTONS and mode_multi_pattern = YES
-    _pattern = pad - 8
-    if _pattern >= 0 // Valid pattern pad
+    if pad < 8 
+      mode_multi_pattern = NO
+    else
+      _pattern = pad - 8
       playing_patterns[_pattern] = not playing_patterns[_pattern]
       LatchPad pad, playing_patterns[_pattern]
+      Log {activating }, _pattern
     endif
 
   elseif uiMode = UIMODE_BUTTONS
@@ -273,9 +278,16 @@
       mode_copy_pattern = YES
 
     elseif pad = 5 // Multi pattern
-      LabelPads { Select patterns to play simultaneously }
-      mode_multi_pattern = YES
+        LabelPads { Select patterns to play simultaneously }
+        mode_multi_pattern = YES
+        for _pattern = 0 to 6
+          LatchPad _pattern + 8, playing_patterns[_pattern]
+          if playing_patterns[_pattern] = YES
+            LabelPad _pattern + 8, { playing }, _pattern
+          endif
+        endfor
 
+      
     elseif pad = 8 // Pattern 1
       last_active_pattern = active_pattern
       active_pattern = 0
@@ -311,7 +323,7 @@
       LatchPad active_pattern + 8, 1
     endif
     
-    if mode_copy_pattern <> 1
+    if mode_copy_pattern <> 1 and mode_multi_pattern <> 1
       uiMode = UIMODE_PADS
       Call @UpdateGUI
     endif
