@@ -20,6 +20,7 @@
 
   pad_edit_got_note = 1  // to know if a note was received while holding a pad - in which case we can exit pad edit mode on pad release
   pad_edit_hold = 0  
+  pad_edit_part_pad = 0 
 
   // states for UI
   
@@ -81,29 +82,44 @@
 @End
 
 @ClearSequencer
-    FillArray polycount, 0
-    FillArray voice1, -1 // clear our notes buffer
-    FillArray voice1_velocity, 0 // clear the velocity buffer
+  FillArray polycount, 0
+  FillArray voice1, -1
+  FillArray voice1_velocity, 0
+  FillArray voice2, -1
+  FillArray voice2_velocity, 0
+  FillArray voice3, -1
+  FillArray voice3_velocity, 0
+  FillArray voice4, -1
+  FillArray voice4_velocity, 0
+  FillArray voice5, -1
+  FillArray voice5_velocity, 0
+  FillArray voice6, -1
+  FillArray voice6_velocity, 0
+  FillArray noteTimeX, 100
+  FillArray noteOnTicks, 0
+  FillArray note_probability, 100
 
-    FillArray voice2, -1 // clear our notes buffer
-    FillArray voice2_velocity, 0 // clear the velocity buffer
+  playing_patterns = [ YES, NO, NO, NO, NO, NO, NO ]
+@End
 
-    FillArray voice3, -1 // clear our notes buffer
-    FillArray voice3_velocity, 0 // clear the velocity buffer
-
-    FillArray voice4, -1 // clear our notes buffer
-    FillArray voice4_velocity, 0 // clear the velocity buffer
-
-    FillArray voice5, -1 // clear our notes buffer
-    FillArray voice5_velocity, 0 // clear the velocity buffer
-
-    FillArray voice6, -1 // clear our notes buffer
-    FillArray voice6_velocity, 0 // clear the velocity buffer
-    FillArray noteTimeX, 100
-    FillArray noteOnTicks, 0
-    FillArray note_probability, 100
-
-    playing_patterns = [ YES, NO, NO, NO, NO, NO, NO ]
+@ClearActivePattern
+  _pattern_start = active_pattern * sizeof_pattern
+  FillArray polycount[_pattern_start], 0, sizeof_pattern
+  FillArray voice1[_pattern_start], -1, sizeof_pattern
+  FillArray voice1_velocity[_pattern_start], 0, sizeof_pattern 
+  FillArray voice2[_pattern_start], -1, sizeof_pattern 
+  FillArray voice2_velocity[_pattern_start], 0, sizeof_pattern 
+  FillArray voice3[_pattern_start], -1, sizeof_pattern 
+  FillArray voice3_velocity[_pattern_start], 0, sizeof_pattern 
+  FillArray voice4[_pattern_start], -1, sizeof_pattern 
+  FillArray voice4_velocity[_pattern_start], 0, sizeof_pattern 
+  FillArray voice5[_pattern_start], -1, sizeof_pattern 
+  FillArray voice5_velocity[_pattern_start], 0, sizeof_pattern 
+  FillArray voice6[_pattern_start], -1, sizeof_pattern
+  FillArray voice6_velocity[_pattern_start], 0, sizeof_pattern
+  FillArray noteTimeX[_pattern_start], 100, sizeof_pattern
+  FillArray noteOnTicks[_pattern_start], 0, sizeof_pattern
+  FillArray note_probability[_pattern_start], 100 , sizeof_pattern
 @End
 
 @OnMetroPulse 
@@ -118,7 +134,7 @@
     if playing_patterns[active_pattern] = YES
       _note_part = (active_pattern * sizeof_pattern) + note_part
 
-      if voice1[_note_part] >= 0 and ((Random 1, 100) < note_probability[_note_part])
+      if voice1[_note_part] >= 0 and ((Random 1, 100) <= note_probability[_note_part])
         _transposeNote = 0
         if transpose 
           _transposeNote = transposeNote
@@ -182,6 +198,11 @@
   pad_edit_step = pad
   mode_pad_edit = 1
   pad_edit_part = 0 
+  if pad < 8
+    pad_edit_part_pad = 8  // used for latching pad in UI. "hold to edit" always edits first part of step
+  else
+    pad_edit_part_pad = 0
+  endif
   pad_edit_got_note = 0
   pad_edit_hold = 1
   Log {Pad held: }, pad
@@ -249,9 +270,19 @@
       mode_multi_pattern = NO
     else
       _pattern = pad - 8
-      playing_patterns[_pattern] = not playing_patterns[_pattern]
+      _new_state = not playing_patterns[_pattern]
+      playing_patterns[_pattern] = _new_state
       LatchPad pad, playing_patterns[_pattern]
-      Log {activating }, _pattern
+      if _new_state = 1 and active_pattern = _pattern
+        LabelPad pad, {P}, _pattern+1, { ON, ARM}
+      elseif _new_state = 1 and active_pattern <> _pattern
+        LabelPad pad, {P}, _pattern+1, { ON}
+      elseif _new_state = 0 and active_pattern = _pattern
+        LabelPad pad, {P}, _pattern+1, { OFF, ARM}
+      else
+        LabelPad pad, {P}, _pattern+1, { OFF}
+      endif
+      Log {Pattern }, _pattern + 1, {: }, _new_state
     endif
 
   elseif uiMode = UIMODE_BUTTONS
@@ -282,12 +313,20 @@
         mode_multi_pattern = YES
         for _pattern = 0 to 6
           LatchPad _pattern + 8, playing_patterns[_pattern]
-          if playing_patterns[_pattern] = YES
-            LabelPad _pattern + 8, { playing }, _pattern
+          if playing_patterns[_pattern] = 1 and active_pattern = _pattern
+            LabelPad _pattern + 8, {P}, _pattern+1, { ON, ARM}
+          elseif playing_patterns[_pattern] = 1 and active_pattern <> _pattern
+            LabelPad _pattern + 8, {P}, _pattern+1, { ON}
+          elseif playing_patterns[_pattern] = 0 and active_pattern = _pattern
+            LabelPad _pattern + 8, {P}, _pattern+1, { OFF, ARM}
+          else
+            LabelPad _pattern + 8, {P}, _pattern+1, { OFF}
           endif
         endfor
 
-      
+    elseif pad = 6 // Clear active pattern
+      Call @ClearActivePattern
+
     elseif pad = 8 // Pattern 1
       last_active_pattern = active_pattern
       active_pattern = 0
@@ -468,7 +507,7 @@
   // Special case if transport is stopped or we have long steps (like 2 bars) we might get 0 ticks so we default to 1 step for these cases.
   if _elapsed_ticks = 0
     _elapsed_pct = 100
-  elseif 
+  else
     _elapsed_pct = tickTime * _elapsed_ticks / noteTime * 100
   endif
 
@@ -594,16 +633,16 @@
   LabelPad 3, { Dump }
   LabelPad 4, { Copy pattern }
   LabelPad 5, { Multi pattern }
-  
-  LabelPad 8, { Pattern 1}
-  LabelPad 9, { Pattern 2}
-  LabelPad 10, { Pattern 3}
-  LabelPad 11, { Pattern 4}
-  LabelPad 12, { Pattern 5}
-  LabelPad 13, { Pattern 6}
-  LabelPad 14, { Pattern 7}
+  LabelPad 6, { Clear active }
+  LabelPad 8, { P1}
+  LabelPad 9, { P2}
+  LabelPad 10, { P3}
+  LabelPad 11, { P4}
+  LabelPad 12, { P5}
+  LabelPad 13, { P6}
+  LabelPad 14, { P7}
   LatchPad 8+active_pattern, 1
-
+  LabelPad 8+active_pattern, {P}, active_pattern+1, { ARM}
 @End
 
 @GUI_LabelKnobs
