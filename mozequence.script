@@ -11,6 +11,15 @@
   UIMODE_PADS = 1
   UIMODE_BUTTONS = 2
 
+  // Buttons
+  BTN_MULTI_PATTERN = 0
+  BTN_COPY_PATTERN = 1
+  BTN_TRANSPOSE = 2
+  BTN_RECORD = 3
+  BTN_DUMP = 5
+  BTN_CLEAR_ALL = 6
+  BTN_CLEAR_ARMED = 7
+
   poly_offset = 0
   note_pos = 0
   note_part = 0
@@ -27,7 +36,7 @@
   resetStepOnNewStep = 0
   uiMode = UIMODE_PADS
   mode_pad_edit = 0
-  mode_multi_pattern = YES
+  mode_multi_pattern = NO
   mode_copy_pattern = NO
   if Unassigned record
     record = 1 // Rec enabled by default
@@ -40,7 +49,7 @@
 
   // init knob defaults
   if Unassigned currentDivisor
-    currentDivisor = 0
+    currentDivisor = 1
     count = 1
     tickCounter = 0
     gate = 0.75
@@ -63,8 +72,6 @@
   active_pattern = 0
 
   call @UpdateGUI
-    mode_copy_pattern = NO
-    mode_multi_pattern = NO
 @End
 
 // Refactor pad_edit -> part_edit
@@ -127,12 +134,9 @@
   step_part = RoundDown(tickCounter / countPerStep) * step_reso 
   note_part = (step * step_reso + step_part) // The note location in the wide grid
   
-  // ugly, but its late
-  _active_pattern = active_pattern
-  
-  for active_pattern = 0 to 6 
-    if playing_patterns[active_pattern] = YES
-      _note_part = (active_pattern * sizeof_pattern) + note_part
+  for _active_pattern = 0 to 6 
+    if (mode_multi_pattern = 0 and active_pattern=_active_pattern) or (mode_multi_pattern = 1 and playing_patterns[_active_pattern] = YES)
+      _note_part = (_active_pattern * sizeof_pattern) + note_part
 
       if voice1[_note_part] >= 0 and ((Random 1, 100) <= note_probability[_note_part])
         _transposeNote = 0
@@ -171,10 +175,7 @@
     endif
   endfor
 
-  active_pattern = _active_pattern
-
   Call @IncrementSequencer
-
 @End
 
 @OnShiftDown
@@ -186,7 +187,6 @@
   elseif uiMode = UIMODE_BUTTONS
     uiMode = UIMODE_PADS // pad mode
     mode_copy_pattern = NO
-    mode_multi_pattern = NO
   endif
   Call @UpdateGUI
 @End 
@@ -224,9 +224,11 @@
       LabelPad pad, { Edit }
       LabelPads {Editing step:part -- }, pad_edit_step, {:} , pad_edit_part, { -- SHIFT or step pad to exit }
     endif
+
 //  elseif uiMode = UIMODE_PADS and mode_pad_reset_step = 1 // something like this for a "performance mode"
     // reset_step = pad
     // resetStepOnNewStep = 1
+
   elseif uiMode = UIMODE_PADS  // pads
     Log {Pad singletapped: }, pad
 
@@ -265,28 +267,9 @@
     CopyArray note_probability[_src_pattern_pos], note_probability[_dest_pattern_pos], sizeof_pattern
 
     LabelPad _pattern + 8, {Copied }, active_pattern+1 
-  elseif uiMode = UIMODE_BUTTONS and mode_multi_pattern = YES
-    if pad < 8 
-      mode_multi_pattern = NO
-    else
-      _pattern = pad - 8
-      _new_state = not playing_patterns[_pattern]
-      playing_patterns[_pattern] = _new_state
-      LatchPad pad, playing_patterns[_pattern]
-      if _new_state = 1 and active_pattern = _pattern
-        LabelPad pad, {P}, _pattern+1, { ON, ARM}
-      elseif _new_state = 1 and active_pattern <> _pattern
-        LabelPad pad, {P}, _pattern+1, { ON}
-      elseif _new_state = 0 and active_pattern = _pattern
-        LabelPad pad, {P}, _pattern+1, { OFF, ARM}
-      else
-        LabelPad pad, {P}, _pattern+1, { OFF}
-      endif
-      Log {Pattern }, _pattern + 1, {: }, _new_state
-    endif
 
   elseif uiMode = UIMODE_BUTTONS
-    if pad = 0 // Transpose
+    if pad = BTN_TRANSPOSE
       transpose = not transpose
       LabelPad 0, { Transpose: }, transpose
 
@@ -294,82 +277,75 @@
         LabelPads { Hello }
       endif
 
-    elseif pad = 1 // Erase All
+    elseif pad = BTN_CLEAR_ALL
       Call @ClearSequencer    
       
-    elseif pad = 2 // Record
+    elseif pad = BTN_RECORD
       record = not record
       LabelPad 2, { Rec: }, record
   
-    elseif pad = 3 // Dump
+    elseif pad = BTN_DUMP
       Call @DumpNotes
       
-    elseif pad = 4 // Copy pattern
+    elseif pad = BTN_COPY_PATTERN
       LabelPads { Select pattern to copy active pattern to }
       mode_copy_pattern = YES
 
-    elseif pad = 5 // Multi pattern
-        LabelPads { Select patterns to play simultaneously }
-        mode_multi_pattern = YES
-        for _pattern = 0 to 6
-          LatchPad _pattern + 8, playing_patterns[_pattern]
-          if playing_patterns[_pattern] = 1 and active_pattern = _pattern
-            LabelPad _pattern + 8, {P}, _pattern+1, { ON, ARM}
-          elseif playing_patterns[_pattern] = 1 and active_pattern <> _pattern
-            LabelPad _pattern + 8, {P}, _pattern+1, { ON}
-          elseif playing_patterns[_pattern] = 0 and active_pattern = _pattern
-            LabelPad _pattern + 8, {P}, _pattern+1, { OFF, ARM}
-          else
-            LabelPad _pattern + 8, {P}, _pattern+1, { OFF}
-          endif
-        endfor
+    elseif pad = BTN_MULTI_PATTERN
+        mode_multi_pattern = not mode_multi_pattern
+        if mode_multi_pattern
+          LabelPads { Select patterns to play simultaneously }
+          LabelPad BTN_MULTI_PATTERN, {Multi: ON}
+        else
+          LabelPads { Single pattern arm mode }
+          LabelPad BTN_MULTI_PATTERN, {Multi: OFF}
+        endif
 
-    elseif pad = 6 // Clear active pattern
+        Call @UpdateGUI
+//        for _pattern = 0 to 6
+//          LatchPad _pattern + 8, playing_patterns[_pattern]
+//          if playing_patterns[_pattern] = 1 and active_pattern = _pattern
+//            LabelPad _pattern + 8, {P}, _pattern+1, { ON, ARM}
+//          elseif playing_patterns[_pattern] = 1 and active_pattern <> _pattern
+//            LabelPad _pattern + 8, {P}, _pattern+1, { ON}
+//          elseif playing_patterns[_pattern] = 0 and active_pattern = _pattern
+//            LabelPad _pattern + 8, {P}, _pattern+1, { OFF, ARM}
+//          else
+//            LabelPad _pattern + 8, {P}, _pattern+1, { OFF}
+//          endif
+//        endfor
+
+    elseif pad = BTN_CLEAR_ARMED
       Call @ClearActivePattern
 
-    elseif pad = 8 // Pattern 1
-      last_active_pattern = active_pattern
-      active_pattern = 0
- 
-    elseif pad = 9 // Pattern 2
-      last_active_pattern = active_pattern
-      active_pattern = 1
- 
-    elseif pad = 10 // Pattern 3
-      last_active_pattern = active_pattern
-      active_pattern = 2
+    elseif pad >= 8 and pad <= 14     // Pattern ARM. Future proof with upper bound ;)
+      if mode_multi_pattern
+        _pattern = pad - 8
+        _new_state = not playing_patterns[_pattern]
+        playing_patterns[_pattern] = _new_state
+        active_pattern = _pattern
+        LatchPad pad, playing_patterns[_pattern]
 
-    elseif pad = 11 // Pattern 4
-      last_active_pattern = active_pattern
-      active_pattern = 3
+        Log {Pattern }, _pattern + 1, {: }, _new_state      
+      else
+        last_active_pattern = active_pattern
+        active_pattern = pad-8
+      endif
 
-    elseif pad = 12 // Pattern 5
-      last_active_pattern = active_pattern
-      active_pattern = 4
- 
-    elseif pad = 13 // Pattern 6
-      last_active_pattern = active_pattern
-      active_pattern = 5
-
-    elseif pad = 14 // Pattern 7
-      last_active_pattern = active_pattern
-      active_pattern = 6
-
+      Call @UpdateGUI
     endif
-    
+
     if pad >= 8
       LatchPad last_active_pattern + 8, 0
       LatchPad active_pattern + 8, 1
     endif
     
-    if mode_copy_pattern <> 1 and mode_multi_pattern <> 1
+    if mode_copy_pattern <> 1 and mode_multi_pattern <> 1 and pad <> BTN_MULTI_PATTERN
       uiMode = UIMODE_PADS
       Call @UpdateGUI
     endif
   endif
-  
 @End
-
 
 @DumpNotes
 
@@ -581,14 +557,16 @@
   if uiMode = UIMODE_PADS AND mode_pad_edit = 1
     call @GUI_PadEditMode
     LabelPads {Editing step:part -- }, pad_edit_step, {:} , pad_edit_part, { -- SHIFT or step pad to exit }
+    LabelKnobs {Note settings}
 
   elseif uiMode = UIMODE_PADS
     call @GUI_PadMode
-    LabelPads {Rec: }, record, { Transpose: }, transpose
+    LabelPads  {P}, active_pattern+1,{ rec: }, record, { transpose: }, transpose, { multi:}, mode_multi_pattern
+    LabelKnobs {P}, active_pattern+1, { settings}
 
   elseif uiMode = UIMODE_BUTTONS
     call @GUI_ButtonMode 
-    LabelPads {Menu}
+    LabelKnobs {P}, active_pattern+1, { settings}
   endif
 @End
 
@@ -615,34 +593,46 @@
   Call @GUI_LabelKnobs
 @End
 
-
- //, {:}, noteTimeX[(active_pattern * sizeof_pattern) + (pad_edit_step * step_reso + the_part)]
-
-
-
 @GUI_ButtonMode
   
   for po = 0 to 15
     LabelPad po, { }
     LatchPad po, 0
   endfor
-      
-  LabelPad 0, { Transpose: }, transpose
-  LabelPad 1, { Clear all }
-  LabelPad 2, { Rec: }, record
-  LabelPad 3, { Dump }
-  LabelPad 4, { Copy pattern }
-  LabelPad 5, { Multi pattern }
-  LabelPad 6, { Clear active }
-  LabelPad 8, { P1}
-  LabelPad 9, { P2}
-  LabelPad 10, { P3}
-  LabelPad 11, { P4}
-  LabelPad 12, { P5}
-  LabelPad 13, { P6}
-  LabelPad 14, { P7}
+
+  LabelPad BTN_TRANSPOSE, { Transpose: }, transpose
+  LabelPad BTN_CLEAR_ALL, { Clear all }
+  LabelPad BTN_RECORD, { Live rec: }, record
+  LabelPad BTN_DUMP, { Dump }
+  LabelPad BTN_COPY_PATTERN, { Copy pattern }
+  LabelPad BTN_CLEAR_ARMED, { Clear armed }
+
+  if mode_multi_pattern  
+    LabelPad BTN_MULTI_PATTERN, {Play: Multi}
+    for _pattern = 0 to 6
+      if playing_patterns[_pattern] = 1 and active_pattern = _pattern
+        LabelPad _pattern + 8, {P}, _pattern+1, { ON, ARM}
+      elseif playing_patterns[_pattern] = 1 and active_pattern <> _pattern
+        LabelPad _pattern + 8, {P}, _pattern+1, { ON}
+      elseif playing_patterns[_pattern] = 0 and active_pattern = _pattern
+        LabelPad _pattern + 8, {P}, _pattern+1, { OFF, ARM}
+      else
+        LabelPad _pattern + 8, {P}, _pattern+1, { OFF}
+      endif
+    endfor
+  else
+    LabelPad BTN_MULTI_PATTERN, {Play: Solo}
+    for _pattern = 0 to 6
+      if active_pattern = _pattern
+        LabelPad _pattern + 8, {P}, _pattern+1, { SOLO}
+      else
+        LabelPad _pattern + 8, {P}, _pattern+1
+      endif
+    endfor
+  endif
+
   LatchPad 8+active_pattern, 1
-  LabelPad 8+active_pattern, {P}, active_pattern+1, { ARM}
+  LabelPads {Tap pattern to arm. SHIFT exits.}
 @End
 
 @GUI_LabelKnobs
