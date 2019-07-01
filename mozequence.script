@@ -302,18 +302,6 @@
         endif
 
         Call @UpdateGUI
-//        for _pattern = 0 to 6
-//          LatchPad _pattern + 8, playing_patterns[_pattern]
-//          if playing_patterns[_pattern] = 1 and active_pattern = _pattern
-//            LabelPad _pattern + 8, {P}, _pattern+1, { ON, ARM}
-//          elseif playing_patterns[_pattern] = 1 and active_pattern <> _pattern
-//            LabelPad _pattern + 8, {P}, _pattern+1, { ON}
-//          elseif playing_patterns[_pattern] = 0 and active_pattern = _pattern
-//            LabelPad _pattern + 8, {P}, _pattern+1, { OFF, ARM}
-//          else
-//            LabelPad _pattern + 8, {P}, _pattern+1, { OFF}
-//          endif
-//        endfor
 
     elseif pad = BTN_CLEAR_ARMED
       Call @ClearActivePattern
