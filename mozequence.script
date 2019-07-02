@@ -249,12 +249,16 @@
     if pad < 8
       exit
     endif
+
     CopyPattern_pattern = pad - 8
     CopyPattern_src_pattern_pos = active_pattern * sizeof_pattern
-    CopyPattern_dest_pattern_pos = _pattern * sizeof_pattern
+    CopyPattern_dest_pattern_pos = CopyPattern_pattern * sizeof_pattern
   
     Call @CopyPattern
-    LabelPad CopyPattern_pattern + 8, {Copied }, active_pattern+1 
+    LabelPad CopyPattern_pattern + 8, {P}, active_pattern+1, {CPY, ARM}
+    LatchPad active_pattern+8, 0
+    LatchPad CopyPattern_pattern + 8, 1
+    active_pattern = CopyPattern_pattern  // Auto-arm after copy
 
   elseif uiMode = UIMODE_BUTTONS
     if pad = BTN_TRANSPOSE
@@ -297,9 +301,17 @@
     elseif pad >= 8 and pad <= 14     // Pattern ARM. Future proof with upper bound ;)
       if mode_multi_pattern
         _pattern = pad - 8
-        _new_state = not playing_patterns[_pattern]
+        if(_pattern = active_pattern)  // In multi-mode, we go ON-ARM-OFF, so only OFF for currently armed pattern
+          _new_state = 0
+          active_pattern = last_active_pattern
+        elseif playing_patterns[_pattern] = NO  // OFF
+          _new_state = 1
+        else  // ON, unarmed
+          last_active_pattern = active_pattern
+          active_pattern = _pattern
+        endif
+
         playing_patterns[_pattern] = _new_state
-        active_pattern = _pattern
         LatchPad pad, playing_patterns[_pattern]
 
         Log {Pattern }, _pattern + 1, {: }, _new_state      
@@ -593,7 +605,7 @@
 
     if _part_cnt > 0
       LatchPad _step, 1
-      LabelPad _step, _part_cnt, {:}, _voice_cnt, {:}, noteTimeX[(active_pattern * sizeof_pattern) + (_step * step_reso)]
+      LabelPad _step, _part_cnt, {:}, _voice_cnt, {:}, Round(noteTimeX[(active_pattern * sizeof_pattern) + (_step * step_reso)])
     else
       LatchPad _step, 0
       LabelPad _step, { }
@@ -698,7 +710,7 @@
   // In the most basic use-case, just Call @InitPadManager 
   // in your OnLoad without setting any of them. 
   
-  pmAnalyseTime = 150 
+  pmAnalyseTime = 200 
   // Length of double tap / tap-and-hold time window in msec
     
   pmManageTimer = YES
@@ -814,9 +826,9 @@
 @OnTimer 
   CurrentTimerTicks = (CurrentTimerTicks + 1) % 65534  // Wraps around every ~10 minutes
 
-  If CurrentTimerTicks % 100 = 0
-    Log {CTT: }, CurrentTimerTicks
-  Endif   
+//  If CurrentTimerTicks % 100 = 0
+//    Log {CTT: }, CurrentTimerTicks
+//  Endif   
 
   for pad = 0 to padMaxId
     if padActive[pad]
