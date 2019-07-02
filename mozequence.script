@@ -1,5 +1,7 @@
 @Onload
   ShowLayout 2
+
+  CurrentTimerTicks = 0
   Call @PadManagerOnLoad
 
   step_reso = 8  // Grid/parts per step
@@ -70,7 +72,7 @@
     last_active_pattern = 1
   endif
   active_pattern = 0
-
+  StartTimer 
   call @UpdateGUI
 @End
 
@@ -215,7 +217,7 @@
 
   if uiMode = UIMODE_PADS and mode_pad_edit = 1
     if (pad_edit_step > 7 AND pad > 7) OR (pad_edit_step < 7 AND pad < 7)    // pad and tapped pad are on the same row  
-      Log { Exiting Pad Edit mode }
+      Log {Exiting Pad Edit mode }
       mode_pad_edit = 0
       Call @UpdateGUI
     else
@@ -230,43 +232,29 @@
     // resetStepOnNewStep = 1
 
   elseif uiMode = UIMODE_PADS  // pads
-    Log {Pad singletapped: }, pad
-
-    pad_edit_step = pad
+    Log {Entering Pad Edit mode for pad }, pad
     mode_pad_edit = 1
+    pad_edit_step = pad
     pad_edit_part = 0
     pad_edit_got_note = 0
+    if pad < 8
+      pad_edit_part_pad = 8 // for UI usage like latching pad etc during edit
+    else
+      pad_edit_part_pad = 0
+    endif
     Call @UpdateGUI
   
   elseif uiMode = UIMODE_BUTTONS and mode_copy_pattern = YES
     mode_copy_pattern = NO
-
     if pad < 8
       exit
     endif
-    
-    _pattern = pad - 8
-    _src_pattern_pos = active_pattern * sizeof_pattern
-    _dest_pattern_pos = _pattern * sizeof_pattern
+    CopyPattern_pattern = pad - 8
+    CopyPattern_src_pattern_pos = active_pattern * sizeof_pattern
+    CopyPattern_dest_pattern_pos = _pattern * sizeof_pattern
   
-    CopyArray voice1[_src_pattern_pos], voice1[_dest_pattern_pos], sizeof_pattern
-    CopyArray voice2[_src_pattern_pos], voice2[_dest_pattern_pos], sizeof_pattern
-    CopyArray voice3[_src_pattern_pos], voice3[_dest_pattern_pos], sizeof_pattern
-    CopyArray voice4[_src_pattern_pos], voice4[_dest_pattern_pos], sizeof_pattern
-    CopyArray voice5[_src_pattern_pos], voice5[_dest_pattern_pos], sizeof_pattern
-    CopyArray voice6[_src_pattern_pos], voice6[_dest_pattern_pos], sizeof_pattern
-    CopyArray voice1_velocity[_src_pattern_pos], voice1_velocity[_dest_pattern_pos], sizeof_pattern
-    CopyArray voice2_velocity[_src_pattern_pos], voice2_velocity[_dest_pattern_pos], sizeof_pattern
-    CopyArray voice3_velocity[_src_pattern_pos], voice3_velocity[_dest_pattern_pos], sizeof_pattern
-    CopyArray voice4_velocity[_src_pattern_pos], voice4_velocity[_dest_pattern_pos], sizeof_pattern
-    CopyArray voice5_velocity[_src_pattern_pos], voice5_velocity[_dest_pattern_pos], sizeof_pattern
-    CopyArray voice6_velocity[_src_pattern_pos], voice6_velocity[_dest_pattern_pos], sizeof_pattern
-    CopyArray polycount[_src_pattern_pos], polycount[_dest_pattern_pos], sizeof_pattern
-    CopyArray noteTimeX[_src_pattern_pos], noteTimeX[_dest_pattern_pos], sizeof_pattern
-    CopyArray noteOnTicks[_src_pattern_pos], noteOnTicks[_dest_pattern_pos], sizeof_pattern
-    CopyArray note_probability[_src_pattern_pos], note_probability[_dest_pattern_pos], sizeof_pattern
-
-    LabelPad _pattern + 8, {Copied }, active_pattern+1 
+    Call @CopyPattern
+    LabelPad CopyPattern_pattern + 8, {Copied }, active_pattern+1 
 
   elseif uiMode = UIMODE_BUTTONS
     if pad = BTN_TRANSPOSE
@@ -335,6 +323,29 @@
   endif
 @End
 
+@CopyPattern
+  _pattern = CopyPattern_pattern
+  _src_pattern_pos = CopyPattern_src_pattern_pos
+  _dest_pattern_pos = CopyPattern_dest_pattern_pos
+
+  CopyArray voice1[_src_pattern_pos], voice1[_dest_pattern_pos], sizeof_pattern
+  CopyArray voice2[_src_pattern_pos], voice2[_dest_pattern_pos], sizeof_pattern
+  CopyArray voice3[_src_pattern_pos], voice3[_dest_pattern_pos], sizeof_pattern
+  CopyArray voice4[_src_pattern_pos], voice4[_dest_pattern_pos], sizeof_pattern
+  CopyArray voice5[_src_pattern_pos], voice5[_dest_pattern_pos], sizeof_pattern
+  CopyArray voice6[_src_pattern_pos], voice6[_dest_pattern_pos], sizeof_pattern
+  CopyArray voice1_velocity[_src_pattern_pos], voice1_velocity[_dest_pattern_pos], sizeof_pattern
+  CopyArray voice2_velocity[_src_pattern_pos], voice2_velocity[_dest_pattern_pos], sizeof_pattern
+  CopyArray voice3_velocity[_src_pattern_pos], voice3_velocity[_dest_pattern_pos], sizeof_pattern
+  CopyArray voice4_velocity[_src_pattern_pos], voice4_velocity[_dest_pattern_pos], sizeof_pattern
+  CopyArray voice5_velocity[_src_pattern_pos], voice5_velocity[_dest_pattern_pos], sizeof_pattern
+  CopyArray voice6_velocity[_src_pattern_pos], voice6_velocity[_dest_pattern_pos], sizeof_pattern
+  CopyArray polycount[_src_pattern_pos], polycount[_dest_pattern_pos], sizeof_pattern
+  CopyArray noteTimeX[_src_pattern_pos], noteTimeX[_dest_pattern_pos], sizeof_pattern
+  CopyArray noteOnTicks[_src_pattern_pos], noteOnTicks[_dest_pattern_pos], sizeof_pattern
+  CopyArray note_probability[_src_pattern_pos], note_probability[_dest_pattern_pos], sizeof_pattern
+@End
+
 @DumpNotes
 
   for _pattern = 0 to 7
@@ -381,11 +392,12 @@
   note_part = 0  
   tickCounter = 0
   total_tickCounter = 0
+  CurrentTimerTicks = 0  // "Optimistically" reset timer tick count on host start to reduce prob that it wraps during recording
 @End 
 
 @OnMidiNoteOn
 
-  log {Midi Note On: }, MIDINote, { Vel: }, MIDIVelocity
+//  log {Midi Note On: }, MIDINote, { Vel: }, MIDIVelocity
   nn = MIDINote
   v = MIDIVelocity
 
@@ -397,7 +409,7 @@
   
   SendMidiThru
 
-  if not record and not mode_pad_edit = 1
+  if not (record and HostRunning) and not mode_pad_edit = 1
     Exit
   endif
   
@@ -410,6 +422,7 @@
     _note_part = (active_pattern * sizeof_pattern) + pad_note_part
  
     if not Unassigned pad_edit_part_pad  // Latch and label when editing parts of step
+      Log {Latching pad}, pad_edit_part_pad
       LabelPad pad_edit_part_pad, nn
       LatchPad pad_edit_part_pad, 1
     endif
@@ -445,16 +458,15 @@
   endif
 
   polycount[_note_part] = _poly_offset
-  noteOnTicks[_note_part] = total_tickCounter
+  noteOnTicks[_note_part] = CurrentTimerTicks //total_tickCounter
   SetNoteState 0, nn, _note_part    // So that MidiNoteOff can reference all data of the note being played
 
   LabelPad _step, _poly_offset, {:}, (NoteName nn, YES) 
   LatchPad _step, 1
-  Log {CPS: }‚ countPerStep, {tickCounter: }, tickCounter, { step: }, step,{ note_part: }, note_part, { note_pos: }, note_pos, { Note: }, (Notename nn, YES)
+//  Log {CPS: }‚ countPerStep, {tickCounter: }, tickCounter, { step: }, step,{ note_part: }, note_part, { note_pos: }, note_pos, { Note: }, (Notename nn, YES)
 
   last_note = nn      // for single-tap edit
   last_velocity = nn  
-
 @End 
 
 @OnMidiNoteOff
@@ -465,17 +477,25 @@
 
   _note_part = GetNoteState 0, nn
   _on_ticks = noteOnTicks[_note_part]
-  _off_ticks = total_tickCounter
+  _off_ticks = CurrentTimerTicks // total_tickCounter
   _elapsed_ticks = _off_ticks - _on_ticks
 
-  // Special case if transport is stopped or we have long steps (like 2 bars) we might get 0 ticks so we default to 1 step for these cases.
-  if _elapsed_ticks = 0
+  // Special case:
+  // if transport is stopped or we have long steps (like 2 bars) we might get 0 ticks so we default to 1 step for these cases.
+  // we might also get negative elapse ticks if timer wrapped around the 16-bit int limit, so we just say 100% elapsed as a safeguard
+  if _elapsed_ticks <= 0
     _elapsed_pct = 100
   else
-    _elapsed_pct = tickTime * _elapsed_ticks / noteTime * 100
+//    _elapsed_pct = tickTime * _elapsed_ticks / noteTime * 100
+    _elapsed_pct = _elapsed_ticks * 10 / noteTime * 100
   endif
 
   Log { Note On: }, _on_ticks, { Off: }, _off_ticks, { Elapsed: }, _elapsed_ticks, { = }, _elapsed_pct
+  if mode_pad_edit
+    LabelPad pad_edit_part_pad, (NoteName nn, YES), {:}, Round(_elapsed_pct) 
+  else
+    LabelPad pad_edit_step, (NoteName nn, YES), {:}, Round(_elapsed_pct) 
+  endif
   noteTimeX[_note_part] = _elapsed_pct  // elapsed as percentage of notetime
 @End
 
@@ -558,6 +578,29 @@
   endif
 @End
 
+@GUI_PadMode
+  Call @GUI_LabelKnobs
+  for _step = 0 to 15
+    _voice_cnt = 0
+    _part_cnt = 0
+    for _part = 0 to step_reso-1
+      _voice_part_cnt = polycount[(active_pattern * sizeof_pattern) + (_step * step_reso + _part)]
+      if _voice_part_cnt > 0
+        _voice_cnt = _voice_cnt + _voice_part_cnt
+        Inc _part_cnt
+      endif
+    endfor
+
+    if _part_cnt > 0
+      LatchPad _step, 1
+      LabelPad _step, _part_cnt, {:}, _voice_cnt, {:}, noteTimeX[(active_pattern * sizeof_pattern) + (_step * step_reso)]
+    else
+      LatchPad _step, 0
+      LabelPad _step, { }
+    endif
+  endfor
+@End
+
 @GUI_PadEditMode
   if pad_edit_step <= 7
     _pad_offset = 8
@@ -565,12 +608,12 @@
     _pad_offset = 0
   endif
 
-  for the_part = 0 to step_reso
+  for the_part = 0 to step_reso-1
     _note_part = (active_pattern * sizeof_pattern) + (pad_edit_step * step_reso + the_part)
     _cnt = polycount[_note_part]
     _pad = the_part + _pad_offset
     if _cnt > 0
-      LabelPad _pad, _cnt, {:}, (NoteName voice1[_note_part], YES), {:}, noteTimeX[_note_part]
+      LabelPad _pad, _cnt, {:}, (NoteName voice1[_note_part], YES), {:}, (Round noteTimeX[_note_part])
       LatchPad _pad, 1
     else
       LatchPad _pad, 0
@@ -646,32 +689,6 @@
   LabelKnob 2, Round probability_knob
 @End
 
-@GUI_PadMode
-
-  Call @GUI_LabelKnobs
-
-  for _step = 0 to 15
-    _voice_cnt = 0
-    _part_cnt = 0
-    for _part = 0 to step_reso-1
-      _voice_part_cnt = polycount[(active_pattern * sizeof_pattern) + (_step * step_reso + _part)]
-      if _voice_part_cnt > 0
-        _voice_cnt = _voice_cnt + _voice_part_cnt
-        Inc _part_cnt
-      endif
-    endfor
-
-    if _part_cnt > 0
-      LatchPad _step, 1
-      LabelPad _step, _part_cnt, {:}, _voice_cnt, {:}, noteTimeX[(active_pattern * sizeof_pattern) + (_step * step_reso)]
-    else
-      LatchPad _step, 0
-      LabelPad _step, { }
-    endif
-  endfor
-
-@End
-
 @PadManagerOnLoad
   
   // The following vars CAN be set before @InitPadManager. 
@@ -690,7 +707,7 @@
   // interval faster than 50, otherwise the pad manager 
   // wont work. Also set pmTickInterval accordingly.
 
-  pmTickInterval = 50
+  pmTickInterval = 10
   // Update interval for the timer in msec.
 
   //  pmExcludePads = [7,15]
@@ -759,7 +776,7 @@
 @ReleasePadState // Param: pad
   Dec padsActiveCnt
   if pmManageTimer and padsActiveCnt = 0
-    StopTimer 
+//    StopTimer 
   endif
   Call @InitPadState
  @End
@@ -770,7 +787,7 @@
     Call @OnPadSingleTap
   else
     if pmManageTimer and padsActiveCnt = 0
-      StartTimer 
+//      StartTimer 
     endif
     if not padActive[LastPad]
       Inc padsActiveCnt
@@ -785,14 +802,22 @@
     padHold[LastPad] = YES
   endif
 
-  if pad_edit_got_note = 1 OR (pad_edit_hold and pad = pad_edit_step)  // second clause is probably sufficient?!
+  if pad_edit_hold and LastPad = pad_edit_step
     pad_edit_got_note = 0
+    pad_edit_hold = 0
     mode_pad_edit = 0
+    Log {PadUp for pad }, LastPad, {, exiting mode_pad_edit}
     Call @UpdateGUI
   endif
 @End 
 
 @OnTimer 
+  CurrentTimerTicks = (CurrentTimerTicks + 1) % 65534  // Wraps around every ~10 minutes
+
+  If CurrentTimerTicks % 100 = 0
+    Log {CTT: }, CurrentTimerTicks
+  Endif   
+
   for pad = 0 to padMaxId
     if padActive[pad]
       Inc padTicks[pad]
