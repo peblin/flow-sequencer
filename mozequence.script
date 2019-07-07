@@ -2,11 +2,12 @@
   ShowLayout 2
 
   CurrentTimerTicks = 0
+  timer_tick_resolution = 10 // Milliseconds per tick
   Call @PadManagerOnLoad
 
   step_reso = 8  // Grid/parts per step
   poly = 6       // Max polyphony per part
-  sizeof_pattern = 16*8   // Size of storing all step parts in an array
+  sizeof_pattern = 16*8      // Size of storing all step parts in an array
 
   // CONSTANTS
 
@@ -83,6 +84,7 @@
 // + Rec should only affect live recording
 // Active_pattern when we have multi patterns? redundant?
 
+// What happens to note delay if youve live recorded, then edits a step? need to clear note delay
 
 @InitSequencer
   if Unassigned polycount
@@ -106,6 +108,7 @@
   FillArray voice6_velocity, 0
   FillArray noteTimeX, 100
   FillArray noteOnTicks, 0
+  FillArray noteOnDelayTicks, 0
   FillArray note_probability, 100
 
   playing_patterns = [ YES, NO, NO, NO, NO, NO, NO ]
@@ -128,10 +131,14 @@
   FillArray voice6_velocity[_pattern_start], 0, sizeof_pattern
   FillArray noteTimeX[_pattern_start], 100, sizeof_pattern
   FillArray noteOnTicks[_pattern_start], 0, sizeof_pattern
+  FillArray noteOnDelayTicks[_pattern_start], 0, sizeof_pattern
   FillArray note_probability[_pattern_start], 100 , sizeof_pattern
 @End
 
 @OnMetroPulse 
+  
+  last_pulse_ticks = CurrentTimerTicks
+
   FlashPad step
   step_part = RoundDown(tickCounter / countPerStep) * step_reso 
   note_part = (step * step_reso + step_part) // The note location in the wide grid
@@ -147,30 +154,33 @@
         endif
 
         _polycount = polycount[_note_part]
-        _noteTime = noteTime * (noteTimeX[_note_part] / 100)
+        _noteDelay = noteOnDelayTicks[_note_part] * timer_tick_resolution
+        _noteTime = noteTime * (noteTimeX[_note_part] / 100) + _noteDelay
+
+        Log {Delay: }, _noteDelay
 
         if _polycount > 5
-          SendMIDINoteOn 0, voice6[_note_part] + _transposeNote, voice6_velocity[_note_part]      
+          SendMIDINoteOn 0, voice6[_note_part] + _transposeNote, voice6_velocity[_note_part], _noteDelay      
           SendMIDINoteOff 0, voice6[_note_part] + _transposeNote, 0, _noteTime
         endif
         if _polycount > 4
-          SendMIDINoteOn 0, voice5[_note_part] + _transposeNote, voice5_velocity[_note_part]      
+          SendMIDINoteOn 0, voice5[_note_part] + _transposeNote, voice5_velocity[_note_part], _noteDelay     
           SendMIDINoteOff 0, voice5[_note_part] + _transposeNote, 0, _noteTime
         endif
         if _polycount > 3
-          SendMIDINoteOn 0, voice4[_note_part] + _transposeNote, voice4_velocity[_note_part]      
+          SendMIDINoteOn 0, voice4[_note_part] + _transposeNote, voice4_velocity[_note_part], _noteDelay      
           SendMIDINoteOff 0, voice4[_note_part] + _transposeNote, 0, _noteTime
         endif
         if _polycount > 2
-          SendMIDINoteOn 0, voice3[_note_part] + _transposeNote, voice3_velocity[_note_part]      
+          SendMIDINoteOn 0, voice3[_note_part] + _transposeNote, voice3_velocity[_note_part], _noteDelay      
           SendMIDINoteOff 0, voice3[_note_part] + _transposeNote, 0, _noteTime
         endif
         if _polycount > 1
-          SendMIDINoteOn 0, voice2[_note_part] + _transposeNote, voice2_velocity[_note_part]      
+          SendMIDINoteOn 0, voice2[_note_part] + _transposeNote, voice2_velocity[_note_part], _noteDelay      
           SendMIDINoteOff 0, voice2[_note_part] + _transposeNote, 0, _noteTime
         endif
         if _polycount > 0
-          SendMIDINoteOn 0, voice1[_note_part] + _transposeNote, voice1_velocity[_note_part]      
+          SendMIDINoteOn 0, voice1[_note_part] + _transposeNote, voice1_velocity[_note_part], _noteDelay      
           SendMIDINoteOff 0, voice1[_note_part] + _transposeNote, 0, _noteTime
         endif
       endif
@@ -355,6 +365,7 @@
   CopyArray polycount[_src_pattern_pos], polycount[_dest_pattern_pos], sizeof_pattern
   CopyArray noteTimeX[_src_pattern_pos], noteTimeX[_dest_pattern_pos], sizeof_pattern
   CopyArray noteOnTicks[_src_pattern_pos], noteOnTicks[_dest_pattern_pos], sizeof_pattern
+  CopyArray noteOnDelayTicks[_src_pattern_pos], noteOnDelayTicks[_dest_pattern_pos], sizeof_pattern
   CopyArray note_probability[_src_pattern_pos], note_probability[_dest_pattern_pos], sizeof_pattern
 @End
 
@@ -408,6 +419,7 @@
 @End 
 
 @OnMidiNoteOn
+  _note_on_ticks = CurrentTimerTicks
 
 //  log {Midi Note On: }, MIDINote, { Vel: }, MIDIVelocity
   nn = MIDINote
@@ -471,6 +483,8 @@
 
   polycount[_note_part] = _poly_offset
   noteOnTicks[_note_part] = CurrentTimerTicks //total_tickCounter
+  noteOnDelayTicks[_note_part] = _note_on_ticks - last_pulse_ticks
+
   SetNoteState 0, nn, _note_part    // So that MidiNoteOff can reference all data of the note being played
 
   LabelPad _step, _poly_offset, {:}, (NoteName nn, YES) 
@@ -499,7 +513,7 @@
     _elapsed_pct = 100
   else
 //    _elapsed_pct = tickTime * _elapsed_ticks / noteTime * 100
-    _elapsed_pct = _elapsed_ticks * 10 / noteTime * 100
+    _elapsed_pct = _elapsed_ticks * timer_tick_resolution / noteTime * 100
   endif
 
   Log { Note On: }, _on_ticks, { Off: }, _off_ticks, { Elapsed: }, _elapsed_ticks, { = }, _elapsed_pct
@@ -768,11 +782,11 @@
   // interval faster than 50, otherwise the pad manager 
   // wont work. Also set pmTickInterval accordingly.
 
-  pmTickInterval = 10
-  // Update interval for the timer in msec.
+  pmTickInterval = timer_tick_resolution    // Update interval for the timer in msec.
 
   //  pmExcludePads = [7,15]
   pmExcludeCnt = 0
+
   // List of pad ids and length of list to be excluded from
   // analysis. For these pads OnSingleTap will be called 
   // immediately in 'OnPadDown' without the analysis delay.
