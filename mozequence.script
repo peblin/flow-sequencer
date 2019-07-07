@@ -435,7 +435,7 @@
  
     if not Unassigned pad_edit_part_pad  // Latch and label when editing parts of step
       Log {Latching pad}, pad_edit_part_pad
-      LabelPad pad_edit_part_pad, nn
+      LabelPad pad_edit_part_pad, (NoteName nn, YES)
       LatchPad pad_edit_part_pad, 1
     endif
   else
@@ -512,8 +512,47 @@
 @End
 
 @OnKnobChange
+
+  if currentDivisor = 0
+    LabelKnob 0, {1/32}
+  elseif currentDivisor = 1
+    LabelKnob 0, {1/16}
+  elseif currentDivisor = 2
+    LabelKnob 0, {1/8t}
+  elseif currentDivisor = 3
+    LabelKnob 0, {1/8}
+  elseif currentDivisor = 4
+    LabelKnob 0, {1/4}
+  elseif currentDivisor = 5
+    LabelKnob 0, {1/2}
+  elseif currentDivisor = 6
+    LabelKnob 0, {bar}
+  elseif currentDivisor = 7
+    LabelKnob 0, {2 bar}
+  endif
+
+
+
   if LastKnob = 0
     currentDivisor = Round ((GetKnobValue 0) / 16)
+    if currentDivisor = 0
+      LabelKnobs {1/32}
+    elseif currentDivisor = 1
+      LabelKnobs {1/16}
+    elseif currentDivisor = 2
+      LabelKnobs {1/8t}
+    elseif currentDivisor = 3
+      LabelKnobs {1/8}
+    elseif currentDivisor = 4
+      LabelKnobs {1/4}
+    elseif currentDivisor = 5
+      LabelKnobs {1/2}
+    elseif currentDivisor = 6
+      LabelKnobs {bar}
+    elseif currentDivisor = 7
+      LabelKnobs {2 bar}
+    endif
+
   elseif LastKnob = 1
     noteTimeX_knob = Round((GetKnobValue 1) / 127 * 800)  
     if noteTimeX_knob < 6.25
@@ -527,6 +566,8 @@
     endif
 //  elseif LastKnob = 2  
 //    gate = (GetKnobValue 2) / 100
+
+  LabelKnobs noteTimeX_knob*1.000, {%}
   elseif LastKnob = 2  
     _probability = (GetKnobValue 2) / 127 * 100
     if mode_pad_edit = 1
@@ -536,7 +577,8 @@
     endif
 
     probability_knob = _probability
-    
+    LabelKnobs (Round probability_knob), {%}
+
   elseif LastKnob = 3
     swing = (GetKnobValue 3) / 127
   endif
@@ -582,7 +624,7 @@
   elseif uiMode = UIMODE_PADS
     call @GUI_PadMode
     LabelPads  {P}, active_pattern+1,{ rec: }, record, { transpose: }, transpose, { multi:}, mode_multi_pattern
-    LabelKnobs {P}, active_pattern+1, { settings}
+//    LabelKnobs {P}, active_pattern+1, { settings}
 
   elseif uiMode = UIMODE_BUTTONS
     call @GUI_ButtonMode 
@@ -625,11 +667,11 @@
     _cnt = polycount[_note_part]
     _pad = the_part + _pad_offset
     if _cnt > 0
-      LabelPad _pad, _cnt, {:}, (NoteName voice1[_note_part], YES), {:}, (Round noteTimeX[_note_part])
+      LabelPad _pad, {🔵}, _cnt, {:}, (NoteName voice1[_note_part], YES), {:}, (Round noteTimeX[_note_part])
       LatchPad _pad, 1
     else
       LatchPad _pad, 0
-      LabelPad _pad, {-}
+      LabelPad _pad, {⚪️}
     endif
   endfor
 
@@ -679,6 +721,13 @@
 @End
 
 @GUI_LabelKnobs
+  LabelKnob 0, {Step}
+  LabelKnob 1, {Note time}
+  LabelKnob 2, {Probability}
+@End
+
+
+@GUI_LabelKnobs_old
   if currentDivisor = 0
     LabelKnob 0, {1/32}
   elseif currentDivisor = 1
