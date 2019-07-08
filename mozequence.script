@@ -37,7 +37,6 @@
   // states for UI
   
   resetStepOnNewStep = 0
-  uiMode = UIMODE_PADS
   mode_pad_edit = 0
   mode_multi_pattern = NO
   mode_copy_pattern = NO
@@ -74,7 +73,7 @@
   endif
   active_pattern = 0
   StartTimer 
-  call @UpdateGUI
+  call @SetUIMode_Pads
 @End
 
 // Refactor pad_edit -> part_edit
@@ -140,7 +139,8 @@
   last_pulse_ticks = CurrentTimerTicks
 
   FlashPad step
-  step_part = RoundDown(tickCounter / countPerStep) * step_reso 
+  step_part = RoundDown(((tickCounter+1) / countPerStep) * step_reso)
+ 
   note_part = (step * step_reso + step_part) // The note location in the wide grid
   
   for _active_pattern = 0 to 6 
@@ -157,7 +157,7 @@
         _noteDelay = noteOnDelayTicks[_note_part] * timer_tick_resolution
         _noteTime = noteTime * (noteTimeX[_note_part] / 100) + _noteDelay
 
-        Log {Delay: }, _noteDelay
+//        Log {Delay: }, _noteDelay
 
         if _polycount > 5
           SendMIDINoteOn 0, voice6[_note_part] + _transposeNote, voice6_velocity[_note_part], _noteDelay      
@@ -339,10 +339,15 @@
     endif
     
     if mode_copy_pattern <> 1 and mode_multi_pattern <> 1 and pad <> BTN_MULTI_PATTERN
-      uiMode = UIMODE_PADS
-      Call @UpdateGUI
+      Call @SetUIMode_Pads
     endif
   endif
+@End
+
+@SetUIMode_Pads
+  uiMode = UIMODE_PADS
+  Call @UpdateGUI
+  LabelKnobs {P}, active_pattern+1, { settings }
 @End
 
 @CopyPattern
@@ -433,7 +438,7 @@
   
   SendMidiThru
 
-  if not (record and HostRunning) and not mode_pad_edit = 1
+  if not ((record and HostRunning) or mode_pad_edit = 1)
     Exit
   endif
   
@@ -489,7 +494,8 @@
 
   LabelPad _step, _poly_offset, {:}, (NoteName nn, YES) 
   LatchPad _step, 1
-//  Log {CPS: }‚ countPerStep, {tickCounter: }, tickCounter, { step: }, step,{ note_part: }, note_part, { note_pos: }, note_pos, { Note: }, (Notename nn, YES)
+
+  Log {ON: step: }, _step,{ note_part: }, _note_part, {CPS: }‚ countPerStep, { tickCounter: }, tickCounter,  { Note: }, (Notename nn, YES)
 
   last_note = nn      // for single-tap edit
   last_velocity = nn  
@@ -502,6 +508,8 @@
   SendMidiThru
 
   _note_part = GetNoteState 0, nn
+  _note_pad = Div (_note_part - active_pattern * sizeof_pattern), step_reso
+  Log {OFF: pad:}, _note_pad, { np:}, _note_part, { ap:},  active_pattern, { sp:}, sizeof_pattern, { sr:}, step_reso
   _on_ticks = noteOnTicks[_note_part]
   _off_ticks = CurrentTimerTicks // total_tickCounter
   _elapsed_ticks = _off_ticks - _on_ticks
@@ -512,16 +520,17 @@
   if _elapsed_ticks <= 0
     _elapsed_pct = 100
   else
-//    _elapsed_pct = tickTime * _elapsed_ticks / noteTime * 100
     _elapsed_pct = _elapsed_ticks * timer_tick_resolution / noteTime * 100
   endif
 
-  Log { Note On: }, _on_ticks, { Off: }, _off_ticks, { Elapsed: }, _elapsed_ticks, { = }, _elapsed_pct
-  if mode_pad_edit
-    LabelPad pad_edit_part_pad, (NoteName nn, YES), {:}, Round(_elapsed_pct) 
-  else
-    LabelPad pad_edit_step, (NoteName nn, YES), {:}, Round(_elapsed_pct) 
-  endif
+//   Log { Note On: }, _on_ticks, { Off: }, _off_ticks, { Elapsed: }, _elapsed_ticks, { = }, _elapsed_pct
+  LabelPad _note_pad, (NoteName nn, YES), {:}, Round(_elapsed_pct) 
+
+//  if mode_pad_edit
+//    LabelPad pad_edit_part_pad, (NoteName nn, YES), {:}, Round(_elapsed_pct) 
+//  else
+//    LabelPad pad_edit_step, (NoteName nn, YES), {:}, Round(_elapsed_pct) 
+//  endif
   noteTimeX[_note_part] = _elapsed_pct  // elapsed as percentage of notetime
 @End
 
