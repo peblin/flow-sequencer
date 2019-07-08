@@ -82,7 +82,7 @@
 // Explicit "end action and return to pad view" call at end of pattern actions (clear, copy etc)
 // + Rec should only affect live recording
 // Active_pattern when we have multi patterns? redundant?
-
+// Quantize modes; Unquantize, To Part, To Step
 // What happens to note delay if youve live recorded, then edits a step? need to clear note delay
 
 @InitSequencer
@@ -139,6 +139,10 @@
   last_pulse_ticks = CurrentTimerTicks
 
   FlashPad step
+
+  // If we dont use RoundDown here, but Round we should be able to get better quantization,
+  // but we need to handle the "last part" so it can wrap over to next step as well as wrap
+  // around at the end of the 16 steps
   step_part = RoundDown(((tickCounter+1) / countPerStep) * step_reso)
  
   note_part = (step * step_reso + step_part) // The note location in the wide grid
@@ -273,18 +277,15 @@
   elseif uiMode = UIMODE_BUTTONS
     if pad = BTN_TRANSPOSE
       transpose = not transpose
-      LabelPad 0, { Transpose: }, transpose
-
-      if transpose = 0
-        LabelPads { Hello }
-      endif
+      LabelPad BTN_TRANSPOSE, { Transpose: }, transpose
+      LabelPads { Transpose: }, transpose
 
     elseif pad = BTN_CLEAR_ALL
       Call @ClearSequencer    
       
     elseif pad = BTN_RECORD
       record = not record
-      LabelPad 2, { Rec: }, record
+      LabelPad BTN_RECORD, { Rec: }, record
   
     elseif pad = BTN_DUMP
       Call @DumpNotes
