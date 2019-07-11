@@ -3,6 +3,7 @@
 
   CurrentTimerTicks = 0
   timer_tick_resolution = 10 // Milliseconds per tick
+  last_pulse_ticks = 0
   Call @PadManagerOnLoad
 
   step_reso = 8  // Grid/parts per step
@@ -13,12 +14,14 @@
 
   UIMODE_PADS = 1
   UIMODE_BUTTONS = 2
+  UIMODE_VOICES = 3
 
   // Buttons
   BTN_MULTI_PATTERN = 0
   BTN_COPY_PATTERN = 1
   BTN_TRANSPOSE = 2
   BTN_RECORD = 3
+  BTN_QUANTIZE = 4
   BTN_DUMP = 5
   BTN_CLEAR_ALL = 6
   BTN_CLEAR_ARMED = 7
@@ -28,9 +31,12 @@
   note_part = 0
   step = 0
   pad_edit_step = 0
-  total_tickCounter = 0  // tracks total ticks since start of transport. might wrap, but that wont kill anyone....i think
+  
+  // tracks total ticks since start of transport. might wrap, but that wont kill anyone....i think
+  total_tickCounter = 0  
 
-  pad_edit_got_note = 1  // to know if a note was received while holding a pad - in which case we can exit pad edit mode on pad release
+// tracks if a note was received while holding a pad - in which case we can exit pad edit mode on pad release
+  pad_edit_got_note = 1  
   pad_edit_hold = 0  
   pad_edit_part_pad = 0 
 
@@ -48,6 +54,14 @@
   endif
 
   PPQN = [8*step_reso, 4*step_reso, 3*step_reso, 2*step_reso, step_reso, step_reso/2, step_reso/4, step_reso/8]
+
+  // quantization
+  
+  QUANT_NONE = 0
+  QUANT_PART = 1
+  QUANT_STEP = 2
+  
+  quantize = QUANT_NONE
 
   // init knob defaults
   if Unassigned currentDivisor
@@ -76,13 +90,43 @@
   call @SetUIMode_Pads
 @End
 
+@IncrementSequencer
+  Inc tickCounter
+  Inc total_tickCounter
+
+  if tickCounter >= countPerStep
+    tickCounter = 0
+    
+    if resetStepOnNewStep = 1
+      resetStepOnNewStep = 0
+      step = reset_step
+    else
+      Inc step
+      if step > 15
+        step = 0
+      endif
+    endif
+  endif
+@End 
+
+@ComputeTimes
+  tickTime = QuarterNote / PPQN[currentDivisor]
+  stepTime = tickTime * step_reso
+  countPerStep = step_reso 
+
+  noteTime = stepTime * gate
+  SetMetroPPQN PPQN[currentDivisor]
+@End
+
+
+
 // Refactor pad_edit -> part_edit
 // Break up OnPad events into smaller functions
 // Explicit "mode_pad_edit" mode variables keeping UI state
 // Explicit "end action and return to pad view" call at end of pattern actions (clear, copy etc)
 // + Rec should only affect live recording
 // Active_pattern when we have multi patterns? redundant?
-// Quantize modes; Unquantize, To Part, To Step
+
 // What happens to note delay if youve live recorded, then edits a step? need to clear note delay
 
 @InitSequencer
@@ -134,18 +178,18 @@
   FillArray note_probability[_pattern_start], 100 , sizeof_pattern
 @End
 
-@OnMetroPulse 
-  
+@OnMetroPulse   
   last_pulse_ticks = CurrentTimerTicks
 
-  FlashPad step
 
   // If we dont use RoundDown here, but Round we should be able to get better quantization,
   // but we need to handle the "last part" so it can wrap over to next step as well as wrap
   // around at the end of the 16 steps
-  step_part = RoundDown(((tickCounter+1) / countPerStep) * step_reso)
- 
+
+  step_part = RoundDown(((tickCounter+1) / countPerStep) * step_reso) - 1
   note_part = (step * step_reso + step_part) // The note location in the wide grid
+  
+//  Log {step_part: }, step_part, {  note_part: }, note_part, {  tickCounter: }, tickCounter, {  tc+1/cps: }, ((tickCounter+1)/countPerStep)
   
   for _active_pattern = 0 to 6 
     if (mode_multi_pattern = 0 and active_pattern=_active_pattern) or (mode_multi_pattern = 1 and playing_patterns[_active_pattern] = YES)
@@ -161,7 +205,7 @@
         _noteDelay = noteOnDelayTicks[_note_part] * timer_tick_resolution
         _noteTime = noteTime * (noteTimeX[_note_part] / 100) + _noteDelay
 
-//        Log {Delay: }, _noteDelay
+        Log {Delay: }, _noteDelay
 
         if _polycount > 5
           SendMIDINoteOn 0, voice6[_note_part] + _transposeNote, voice6_velocity[_note_part], _noteDelay      
@@ -191,20 +235,25 @@
     endif
   endfor
 
+  FlashPad step
   Call @IncrementSequencer
 @End
 
 @OnShiftDown
   if uiMode = UIMODE_PADS and mode_pad_edit = 1
-      Log { Exiting Pad Edit mode }
-      mode_pad_edit = 0
+    Call @SetUIMode_Voices 
+//      Log { Exiting Pad Edit mode }
+//      mode_pad_edit = 0
+  elseif uiMode = UIMODE_VOICES
+    Call @SetUIMode_Pads
   elseif uiMode = UIMODE_PADS
     uiMode = UIMODE_BUTTONS // "button" mode
+    Call @UpdateGUI
   elseif uiMode = UIMODE_BUTTONS
     uiMode = UIMODE_PADS // pad mode
     mode_copy_pattern = NO
+    Call @UpdateGUI
   endif
-  Call @UpdateGUI
 @End 
 
 @OnShiftUp
@@ -235,9 +284,10 @@
       mode_pad_edit = 0
       Call @UpdateGUI
     else
+      LabelPad pad_edit_part_pad, {⚪️}
       pad_edit_part = pad % step_reso // Only step_reso parts
       pad_edit_part_pad = pad // for UI usage like latching pad etc during edit
-      LabelPad pad, { Edit }
+      LabelPad pad_edit_part_pad, {🔴}
       LabelPads {Editing step:part -- }, pad_edit_step, {:} , pad_edit_part, { -- SHIFT or step pad to exit }
     endif
 
@@ -287,6 +337,10 @@
       record = not record
       LabelPad BTN_RECORD, { Rec: }, record
   
+    elseif pad = BTN_QUANTIZE
+      quantize = (quantize + 1) % 3
+      Call @UpdateGUI
+ 
     elseif pad = BTN_DUMP
       Call @DumpNotes
       
@@ -312,13 +366,17 @@
     elseif pad >= 8 and pad <= 14     // Pattern ARM. Future proof with upper bound ;)
       if mode_multi_pattern
         _pattern = pad - 8
-        if(_pattern = active_pattern)  // In multi-mode, we go ON-ARM-OFF, so only OFF for currently armed pattern
-          _new_state = 0
-          active_pattern = last_active_pattern
-        elseif playing_patterns[_pattern] = NO  // OFF
+        _current_state = playing_patterns[_pattern]
+        if _pattern = active_pattern and _current_state = NO  // OFF, ARM
           _new_state = 1
-        else  // ON, unarmed
-          last_active_pattern = active_pattern
+          active_pattern = _pattern
+        elseif _pattern = active_pattern and _current_state = YES // ON, ARM
+          _new_state = 0
+          active_pattern = _pattern
+        elseif _pattern <> active_pattern and _current_state = NO // OFF, UNARM
+          _new_state = 1
+          active_pattern = _pattern          
+        elseif _pattern <> active_pattern and _current_state = YES // ON, UNARM
           active_pattern = _pattern
         endif
 
@@ -339,16 +397,23 @@
       LatchPad active_pattern + 8, 1
     endif
     
-    if mode_copy_pattern <> 1 and mode_multi_pattern <> 1 and pad <> BTN_MULTI_PATTERN
-      Call @SetUIMode_Pads
-    endif
+//    if mode_copy_pattern <> 1 and mode_multi_pattern <> 1 and pad <> 
+// BTN_MULTI_PATTERN and pad <> BTN_QUANTIZE
+//      Call @SetUIMode_Pads
+//    endif
   endif
 @End
 
 @SetUIMode_Pads
   uiMode = UIMODE_PADS
+  ShowLayout 2
   Call @UpdateGUI
   LabelKnobs {P}, active_pattern+1, { settings }
+@End
+
+@SetUIMode_Voices
+  uiMode = UIMODE_VOICES
+  Call @UpdateGUI
 @End
 
 @CopyPattern
@@ -458,29 +523,36 @@
     endif
   else
     _step = step
-    _note_part = (active_pattern * sizeof_pattern) + note_part
+    if quantize = QUANT_STEP
+      if step_part > 3 
+        _step = (_step  + 1) % 16
+      endif
+      _note_part = (active_pattern * sizeof_pattern) + _step * step_reso
+    else
+      _note_part = (active_pattern * sizeof_pattern) + note_part
+    endif
   endif
   
   _poly_offset = polycount[_note_part]
  
   if _poly_offset = 0
     voice1[_note_part] = nn
-    voice1_velocity[_note_part] = nn
+    voice1_velocity[_note_part] = v
   elseif _poly_offset = 1
     voice2[_note_part] = nn
-    voice2_velocity[_note_part] = nn
+    voice2_velocity[_note_part] = v
   elseif _poly_offset = 2
     voice3[_note_part] = nn
-    voice3_velocity[_note_part] = nn
+    voice3_velocity[_note_part] = v
   elseif _poly_offset = 3
     voice4[_note_part] = nn
-    voice4_velocity[_note_part] = nn
+    voice4_velocity[_note_part] = v
   elseif _poly_offset = 4
     voice5[_note_part] = nn
-    voice5_velocity[_note_part] = nn
+    voice5_velocity[_note_part] = v
   elseif _poly_offset = 5
     voice6[_note_part] = nn
-    voice6_velocity[_note_part] = nn
+    voice6_velocity[_note_part] = v
   endif
 
   if _poly_offset < 8
@@ -489,9 +561,15 @@
 
   polycount[_note_part] = _poly_offset
   noteOnTicks[_note_part] = CurrentTimerTicks //total_tickCounter
-  noteOnDelayTicks[_note_part] = _note_on_ticks - last_pulse_ticks
 
-  SetNoteState 0, nn, _note_part    // So that MidiNoteOff can reference all data of the note being played
+  if quantize = QUANT_NONE
+    noteOnDelayTicks[_note_part] = _note_on_ticks - last_pulse_ticks
+  else
+    noteOnDelayTicks[_note_part] = 0
+  endif
+
+  // Store part so that MidiNoteOff can reference all data of the note being played
+  SetNoteState 0, nn, _note_part    
 
   LabelPad _step, _poly_offset, {:}, (NoteName nn, YES) 
   LatchPad _step, 1
@@ -526,12 +604,6 @@
 
 //   Log { Note On: }, _on_ticks, { Off: }, _off_ticks, { Elapsed: }, _elapsed_ticks, { = }, _elapsed_pct
   LabelPad _note_pad, (NoteName nn, YES), {:}, Round(_elapsed_pct) 
-
-//  if mode_pad_edit
-//    LabelPad pad_edit_part_pad, (NoteName nn, YES), {:}, Round(_elapsed_pct) 
-//  else
-//    LabelPad pad_edit_step, (NoteName nn, YES), {:}, Round(_elapsed_pct) 
-//  endif
   noteTimeX[_note_part] = _elapsed_pct  // elapsed as percentage of notetime
 @End
 
@@ -611,49 +683,59 @@
   call @UpdateGUI
 @End
 
-@IncrementSequencer
-  Inc tickCounter
-  Inc total_tickCounter
-
-  if tickCounter >= countPerStep
-    tickCounter = 0
-    
-    if resetStepOnNewStep = 1
-      resetStepOnNewStep = 0
-      step = reset_step
-    else
-      Inc step
-      if step > 15
-        step = 0
-      endif
-    endif
-  endif
-@End 
-
-@ComputeTimes
-  tickTime = QuarterNote / PPQN[currentDivisor]
-  stepTime = tickTime * step_reso
-  countPerStep = step_reso 
-
-  noteTime = stepTime * gate
-  SetMetroPPQN PPQN[currentDivisor]
-@End
 
 @UpdateGUI
   if uiMode = UIMODE_PADS AND mode_pad_edit = 1
     call @GUI_PadEditMode
-    LabelPads {Editing step:part -- }, pad_edit_step, {:} , pad_edit_part, { -- SHIFT or step pad to exit }
-    LabelKnobs {Note settings}
 
   elseif uiMode = UIMODE_PADS
     call @GUI_PadMode
-    LabelPads  {P}, active_pattern+1,{ rec: }, record, { transpose: }, transpose, { multi:}, mode_multi_pattern
 //    LabelKnobs {P}, active_pattern+1, { settings}
 
   elseif uiMode = UIMODE_BUTTONS
     call @GUI_ButtonMode 
     LabelKnobs {P}, active_pattern+1, { settings}
+ 
+  elseif uiMode = UIMODE_VOICES
+     call @GUI_VoicesMode
   endif
+@End
+
+@GUI_VoicesMode
+  ShowLayout 3
+  _edit_note_part = (active_pattern * sizeof_pattern) + (pad_edit_step * step_reso) + pad_edit_part
+
+  _n = voice1[_edit_note_part]
+  _n1 = _n
+  LabelKnob 0, (NoteName _n, YES)
+  SetKnobValue 0, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+
+  _n = voice2[_edit_note_part]
+  LabelKnob 1, (NoteName _n, YES)
+  SetKnobValue 1, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+
+  _n = voice3[_edit_note_part]
+  LabelKnob 2, (NoteName _n, YES)
+  SetKnobValue 2, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+
+  _n = voice4[_edit_note_part]
+  LabelKnob 3, (NoteName _n, YES)
+  SetKnobValue 3, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+
+  _n = voice5[_edit_note_part]
+  LabelKnob 4, (NoteName _n, YES)
+  SetKnobValue 4, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+
+  _n = voice6[_edit_note_part]
+  LabelKnob 5, (NoteName _n, YES)
+  SetKnobValue 5, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+
+  LabelKnob 6, {Note time}
+  SetKnobValue 6, (TranslateScale noteTimeX[_edit_note_part], 0, 800, 0, 127)
+
+  LabelKnob 7, {Probability}
+  SetKnobValue 6, (TranslateScale note_probability[_edit_note_part], 0, 100, 0, 127)
+  
 @End
 
 @GUI_PadMode
@@ -677,6 +759,17 @@
       LabelPad _step, { }
     endif
   endfor
+  
+  if transpose and mode_multi_pattern
+    LabelPads  {P}, active_pattern+1,{ ⚪️ }, { transpose: }, transpose, { Play: Multi}, { quant: }, quantize
+  elseif transpose
+    LabelPads  {P}, active_pattern+1,{ ⚪️ SOLO}, { transpose: }, transpose, { quant: }, quantize
+  elseif record and mode_multi_pattern
+    LabelPads  {P}, active_pattern+1,{ 🔴 }, { Play: Multi}, { quant: }, quantize
+  elseif record
+    LabelPads  {P}, active_pattern+1,{ 🔴 SOLO}, { quant: }, quantize
+  endif
+
 @End
 
 @GUI_PadEditMode
@@ -698,6 +791,11 @@
       LabelPad _pad, {⚪️}
     endif
   endfor
+  
+  LabelPad pad_edit_part_pad, {🔴}
+  LabelPad pad_edit_step, {✅ Done}
+  LabelPads {⚠️ Editing }, pad_edit_step, {:} , pad_edit_part, {  ℹ️ SHIFT for voices }
+  LabelKnobs {Note settings}
 
   Call @GUI_LabelKnobs
 @End
@@ -709,24 +807,32 @@
     LatchPad po, 0
   endfor
 
-  LabelPad BTN_TRANSPOSE, { Transpose: }, transpose
-  LabelPad BTN_CLEAR_ALL, { Clear all }
-  LabelPad BTN_RECORD, { Live rec: }, record
-  LabelPad BTN_DUMP, { Dump }
-  LabelPad BTN_COPY_PATTERN, { Copy pattern }
-  LabelPad BTN_CLEAR_ARMED, { Clear armed }
+  LabelPad BTN_TRANSPOSE, {Transpose:}, transpose
+  LabelPad BTN_CLEAR_ALL, {Clear all}
+  LabelPad BTN_RECORD, {Live rec:}, record
+  LabelPad BTN_DUMP, {Dump}
+  LabelPad BTN_COPY_PATTERN, {Copy pattern}
+  LabelPad BTN_CLEAR_ARMED, {Clear armed}
+
+  if quantize = QUANT_NONE
+    LabelPad BTN_QUANTIZE, {Quant: None} 
+  elseif quantize = QUANT_PART
+    LabelPad BTN_QUANTIZE, {Quant: Part} 
+  else // QUANT_STEP
+    LabelPad BTN_QUANTIZE, {Quant: Step} 
+  endif
 
   if mode_multi_pattern  
     LabelPad BTN_MULTI_PATTERN, {Play: Multi}
     for _pattern = 0 to 6
       if playing_patterns[_pattern] = 1 and active_pattern = _pattern
-        LabelPad _pattern + 8, {P}, _pattern+1, { ON, ARM}
+        LabelPad _pattern + 8, {P}, _pattern+1, {🔴 ON}
       elseif playing_patterns[_pattern] = 1 and active_pattern <> _pattern
-        LabelPad _pattern + 8, {P}, _pattern+1, { ON}
+        LabelPad _pattern + 8, {P}, _pattern+1, {ON}
       elseif playing_patterns[_pattern] = 0 and active_pattern = _pattern
-        LabelPad _pattern + 8, {P}, _pattern+1, { OFF, ARM}
+        LabelPad _pattern + 8, {P}, _pattern+1, {🔴 OFF}
       else
-        LabelPad _pattern + 8, {P}, _pattern+1, { OFF}
+        LabelPad _pattern + 8, {P}, _pattern+1, {OFF}
       endif
     endfor
   else
@@ -741,7 +847,7 @@
   endif
 
   LatchPad 8+active_pattern, 1
-  LabelPads {Tap pattern to arm. SHIFT exits.}
+  LabelPads {Tap pattern to arm. ℹ️ SHIFT exits.}
 @End
 
 @GUI_LabelKnobs
