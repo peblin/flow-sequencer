@@ -1,12 +1,10 @@
 // TODO
-// Refactor pad_edit -> part_edit
 // Break up On...  events into smaller functions
 // ^^ Separate UI
-// + Rec should only affect live recording
+// Knob modes - "pads", "part edit", "buttons" (pattern settings)
 
 // BUGS
-// noteTimeX is overwritten if note is replayed even if recording is Off
-// cant exit editing of step 7:7
+// Note Time knobs doesnt react
 // What happens to note delay if youve live recorded, then edits a step? need to clear note delay
 
 @Onload
@@ -129,10 +127,6 @@
   SetMetroPPQN PPQN[currentDivisor]
 @End
 
-
-
-
-
 @InitSequencer
   if Unassigned polycount
     Call @ClearSequencer
@@ -185,7 +179,6 @@
 @OnMetroPulse   
   last_pulse_ticks = CurrentTimerTicks
 
-
   // If we dont use RoundDown here, but Round we should be able to get better quantization,
   // but we need to handle the "last part" so it can wrap over to next step as well as wrap
   // around at the end of the 16 steps
@@ -194,7 +187,6 @@
   note_part = (step * step_reso + step_part) // The note location in the wide grid
   
 //  Log {step_part: }, step_part, {  note_part: }, note_part, {  tickCounter: }, tickCounter, {  tc+1/cps: }, ((tickCounter+1)/countPerStep)
-  
   for _active_pattern = 0 to 6 
     if (mode_multi_pattern = 0 and active_pattern=_active_pattern) or (mode_multi_pattern = 1 and playing_patterns[_active_pattern] = YES)
       _note_part = (_active_pattern * sizeof_pattern) + note_part
@@ -208,8 +200,6 @@
         _polycount = polycount[_note_part]
         _noteDelay = noteOnDelayTicks[_note_part] * timer_tick_resolution
         _noteTime = noteTime * (noteTimeX[_note_part] / 100) + _noteDelay
-
-        Log {Delay: }, _noteDelay
 
         if _polycount > 5
           SendMIDINoteOn 0, voice6[_note_part] + _transposeNote, voice6_velocity[_note_part], _noteDelay      
@@ -246,8 +236,6 @@
 @OnShiftDown
   if uiMode = UIMODE_PADS and mode_pad_edit = 1
     Call @SetUIMode_Voices 
-//      Log { Exiting Pad Edit mode }
-//      mode_pad_edit = 0
   elseif uiMode = UIMODE_VOICES
     Call @SetUIMode_Pads
   elseif uiMode = UIMODE_PADS
@@ -279,143 +267,154 @@
   Call @UpdateGUI
 @End
 
+@OnPadSingleTap_InPadEdit
+  if (pad_edit_step > 7 AND pad > 7) OR (pad_edit_step <= 7 AND pad <= 7)  // pad and tapped pad are on the same row  
+    Log {Exiting Pad Edit mode }
+    mode_pad_edit = 0
+    Call @UpdateGUI
+  else  
+    _note_part = (active_pattern * sizeof_pattern) + pad_edit_step * step_reso + (pad_edit_part_pad % step_reso)
+    if voice1[_note_part] > -1
+      LabelPad pad_edit_part_pad, {🔵}, (NoteName voice1[_note_part], YES), {:}, polycount[_note_part]
+    else
+      LabelPad pad_edit_part_pad, {⚪️}
+    endif
+
+    pad_edit_part = pad % step_reso // Only step_reso parts
+    pad_edit_part_pad = pad // for UI usage like latching pad etc during edit
+    pad_edit_got_note = NO
+
+    _note_part = (active_pattern * sizeof_pattern) + pad_edit_step * step_reso + (pad_edit_part_pad % step_reso)
+    if voice1[_note_part] > -1
+      LabelPad pad_edit_part_pad, {🔴}, (NoteName voice1[_note_part], YES), {:}, polycount[_note_part]
+    else
+      LabelPad pad_edit_part_pad, {🔴}
+    endif
+    LabelPads {⚠️ Editing }, pad_edit_step, {:} , pad_edit_part, {  ℹ️ SHIFT for voices }
+  endif
+@End
+
+@EnterPadEditMode
+  mode_pad_edit = 1
+  pad_edit_step = pad
+  pad_edit_part = 0
+  pad_edit_got_note = NO
+  if pad < 8
+    pad_edit_part_pad = 8 // for UI usage like latching pad etc during edit
+  else
+    pad_edit_part_pad = 0
+  endif
+  Call @UpdateGUI
+@End
+
+@OnPadSingleTap_InCopyPattern
+  mode_copy_pattern = NO
+  if pad < 8
+    exit
+  endif
+
+  CopyPattern_pattern = pad - 8
+  CopyPattern_src_pattern_pos = active_pattern * sizeof_pattern
+  CopyPattern_dest_pattern_pos = CopyPattern_pattern * sizeof_pattern
+
+  Call @CopyPattern
+  LabelPad CopyPattern_pattern + 8, {P}, active_pattern+1, {CPY, ARM}
+  LatchPad active_pattern+8, 0
+  LatchPad CopyPattern_pattern + 8, 1
+  active_pattern = CopyPattern_pattern  // Auto-arm after copy
+@End
+
+@OnPadSingleTap_Buttons  
+  if pad = BTN_TRANSPOSE
+    transpose = not transpose
+    LabelPad BTN_TRANSPOSE, { Transpose: }, transpose
+    LabelPads { Transpose: }, transpose
+
+  elseif pad = BTN_CLEAR_ALL
+    Call @ClearSequencer    
+    
+  elseif pad = BTN_RECORD
+    record = not record
+    LabelPad BTN_RECORD, { Rec: }, record
+
+  elseif pad = BTN_QUANTIZE
+    quantize = (quantize + 1) % 
+    Call @UpdateGUI
+
+  elseif pad = BTN_DUMP
+    Call @DumpNotes
+    
+  elseif pad = BTN_COPY_PATTERN
+    LabelPads { Select pattern to copy active pattern to }
+    mode_copy_pattern = YES
+
+  elseif pad = BTN_MULTI_PATTERN
+      mode_multi_pattern = not mode_multi_pattern
+      if mode_multi_pattern
+        LabelPads { Select patterns to play simultaneously }
+        LabelPad BTN_MULTI_PATTERN, {Multi: ON}
+      else
+        LabelPads { Single pattern arm mode }
+        LabelPad BTN_MULTI_PATTERN, {Multi: OFF}
+      endif
+      Call @UpdateGUI
+
+  elseif pad = BTN_CLEAR_ARMED
+    Call @ClearActivePattern
+
+  elseif pad >= 8 and pad <= 14     // Pattern ARM. Future proof with upper bound ;)
+    if mode_multi_pattern
+      _pattern = pad - 8
+      _current_state = playing_patterns[_pattern]
+      if _pattern = active_pattern and _current_state = NO  // OFF, ARM
+        _new_state = 1
+        active_pattern = _pattern
+      elseif _pattern = active_pattern and _current_state = YES // ON, ARM
+        _new_state = 0
+        active_pattern = _pattern
+      elseif _pattern <> active_pattern and _current_state = NO // OFF, UNARM
+        _new_state = 1
+        active_pattern = _pattern          
+      elseif _pattern <> active_pattern and _current_state = YES // ON, UNARM
+        active_pattern = _pattern
+      endif
+
+      playing_patterns[_pattern] = _new_state
+      LatchPad pad, playing_patterns[_pattern]
+
+      Log {Pattern }, _pattern + 1, {: }, _new_state      
+    else
+      last_active_pattern = active_pattern
+      active_pattern = pad-8
+    endif
+
+    Call @UpdateGUI
+
+    if pad >= 8
+      LatchPad last_active_pattern + 8, 0
+      LatchPad active_pattern + 8, 1
+    endif
+   endif
+@End
+
+// ROUTER: Single Taps 
 @OnPadSingleTap // param: pad
   if uiMode = UIMODE_PADS and mode_pad_edit = 1
-    if (pad_edit_step > 7 AND pad > 7) OR (pad_edit_step <= 7 AND pad <= 7)  // pad and tapped pad are on the same row  
-      Log {Exiting Pad Edit mode }
-      mode_pad_edit = 0
-      Call @UpdateGUI
-    else  
-      _note_part = (active_pattern * sizeof_pattern) + pad_edit_step * step_reso + (pad_edit_part_pad % step_reso)
-      if voice1[_note_part] > -1
-        LabelPad pad_edit_part_pad, {🔵}, (NoteName voice1[_note_part], YES), {:}, polycount[_note_part]
-      else
-        LabelPad pad_edit_part_pad, {⚪️}
-      endif
-
-      pad_edit_part = pad % step_reso // Only step_reso parts
-      pad_edit_part_pad = pad // for UI usage like latching pad etc during edit
-      pad_edit_got_note = NO
-
-      _note_part = (active_pattern * sizeof_pattern) + pad_edit_step * step_reso + (pad_edit_part_pad % step_reso)
-      if voice1[_note_part] > -1
-        LabelPad pad_edit_part_pad, {🔴}, (NoteName voice1[_note_part], YES), {:}, polycount[_note_part]
-      else
-        LabelPad pad_edit_part_pad, {🔴}
-      endif
-      LabelPads {⚠️ Editing }, pad_edit_step, {:} , pad_edit_part, {  ℹ️ SHIFT for voices }
-  endif
+    Call @OnPadSingleTap_InPadEdit
 
 //  elseif uiMode = UIMODE_PADS and mode_pad_reset_step = 1 // something like this for a "performance mode"
     // reset_step = pad
     // resetStepOnNewStep = 1
 
   elseif uiMode = UIMODE_PADS  // pads
-    Log {Entering Pad Edit mode for pad }, pad
-    mode_pad_edit = 1
-    pad_edit_step = pad
-    pad_edit_part = 0
-    pad_edit_got_note = NO
-    if pad < 8
-      pad_edit_part_pad = 8 // for UI usage like latching pad etc during edit
-    else
-      pad_edit_part_pad = 0
-    endif
-    Call @UpdateGUI
-  
-  elseif uiMode = UIMODE_BUTTONS and mode_copy_pattern = YES
-    mode_copy_pattern = NO
-    if pad < 8
-      exit
-    endif
+    Call @EnterPadEditMode
 
-    CopyPattern_pattern = pad - 8
-    CopyPattern_src_pattern_pos = active_pattern * sizeof_pattern
-    CopyPattern_dest_pattern_pos = CopyPattern_pattern * sizeof_pattern
-  
-    Call @CopyPattern
-    LabelPad CopyPattern_pattern + 8, {P}, active_pattern+1, {CPY, ARM}
-    LatchPad active_pattern+8, 0
-    LatchPad CopyPattern_pattern + 8, 1
-    active_pattern = CopyPattern_pattern  // Auto-arm after copy
+  elseif uiMode = UIMODE_BUTTONS and mode_copy_pattern = YES
+    Call @OnPadSingleTap_InCopyPattern
 
   elseif uiMode = UIMODE_BUTTONS
-    if pad = BTN_TRANSPOSE
-      transpose = not transpose
-      LabelPad BTN_TRANSPOSE, { Transpose: }, transpose
-      LabelPads { Transpose: }, transpose
+    Call @OnPadSingleTap_Buttons
 
-    elseif pad = BTN_CLEAR_ALL
-      Call @ClearSequencer    
-      
-    elseif pad = BTN_RECORD
-      record = not record
-      LabelPad BTN_RECORD, { Rec: }, record
-  
-    elseif pad = BTN_QUANTIZE
-      quantize = (quantize + 1) % 3
-      Call @UpdateGUI
- 
-    elseif pad = BTN_DUMP
-      Call @DumpNotes
-      
-    elseif pad = BTN_COPY_PATTERN
-      LabelPads { Select pattern to copy active pattern to }
-      mode_copy_pattern = YES
-
-    elseif pad = BTN_MULTI_PATTERN
-        mode_multi_pattern = not mode_multi_pattern
-        if mode_multi_pattern
-          LabelPads { Select patterns to play simultaneously }
-          LabelPad BTN_MULTI_PATTERN, {Multi: ON}
-        else
-          LabelPads { Single pattern arm mode }
-          LabelPad BTN_MULTI_PATTERN, {Multi: OFF}
-        endif
-
-        Call @UpdateGUI
-
-    elseif pad = BTN_CLEAR_ARMED
-      Call @ClearActivePattern
-
-    elseif pad >= 8 and pad <= 14     // Pattern ARM. Future proof with upper bound ;)
-      if mode_multi_pattern
-        _pattern = pad - 8
-        _current_state = playing_patterns[_pattern]
-        if _pattern = active_pattern and _current_state = NO  // OFF, ARM
-          _new_state = 1
-          active_pattern = _pattern
-        elseif _pattern = active_pattern and _current_state = YES // ON, ARM
-          _new_state = 0
-          active_pattern = _pattern
-        elseif _pattern <> active_pattern and _current_state = NO // OFF, UNARM
-          _new_state = 1
-          active_pattern = _pattern          
-        elseif _pattern <> active_pattern and _current_state = YES // ON, UNARM
-          active_pattern = _pattern
-        endif
-
-        playing_patterns[_pattern] = _new_state
-        LatchPad pad, playing_patterns[_pattern]
-
-        Log {Pattern }, _pattern + 1, {: }, _new_state      
-      else
-        last_active_pattern = active_pattern
-        active_pattern = pad-8
-      endif
-
-      Call @UpdateGUI
-    endif
-
-    if pad >= 8
-      LatchPad last_active_pattern + 8, 0
-      LatchPad active_pattern + 8, 1
-    endif
-    
-//    if mode_copy_pattern <> 1 and mode_multi_pattern <> 1 and pad <> 
-// BTN_MULTI_PATTERN and pad <> BTN_QUANTIZE
-//      Call @SetUIMode_Pads
-//    endif
   endif
 @End
 
@@ -456,7 +455,6 @@
 @End
 
 @DumpNotes
-
   for _pattern = 0 to 7
     for _step = 0 to 15
        for _part = 0 to step_reso - 1
@@ -468,7 +466,6 @@
       endfor  
     endfor  
   endfor
- 
 @End
 
 @OnPadDoubleTap
@@ -574,7 +571,7 @@
   polycount[_note_part] = _poly_offset
   noteOnTicks[_note_part] = CurrentTimerTicks //total_tickCounter
 
-  if quantize = QUANT_NONE
+  if quantize = QUANT_NONE and HostRunning  // we can only have delay if metronome is running
     noteOnDelayTicks[_note_part] = _note_on_ticks - last_pulse_ticks
   else
     noteOnDelayTicks[_note_part] = 0
