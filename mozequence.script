@@ -1,3 +1,14 @@
+// TODO
+// Refactor pad_edit -> part_edit
+// Break up On...  events into smaller functions
+// ^^ Separate UI
+// + Rec should only affect live recording
+
+// BUGS
+// noteTimeX is overwritten if note is replayed even if recording is Off
+// cant exit editing of step 7:7
+// What happens to note delay if youve live recorded, then edits a step? need to clear note delay
+
 @Onload
   ShowLayout 2
 
@@ -36,7 +47,7 @@
   total_tickCounter = 0  
 
 // tracks if a note was received while holding a pad - in which case we can exit pad edit mode on pad release
-  pad_edit_got_note = 1  
+  pad_edit_got_note = YES
   pad_edit_hold = 0  
   pad_edit_part_pad = 0 
 
@@ -120,15 +131,7 @@
 
 
 
-// Refactor pad_edit -> part_edit
-// Break up OnPad events into smaller functions
-// Explicit "mode_pad_edit" mode variables keeping UI state
-// Explicit "end action and return to pad view" call at end of pattern actions (clear, copy etc)
-// + Rec should only affect live recording
-// Active_pattern when we have multi patterns? redundant?
 
-// What happens to note delay if youve live recorded, then edits a step? need to clear note delay
-// Bug, seems to be dead end when editing 7:7
 
 @InitSequencer
   if Unassigned polycount
@@ -269,30 +272,37 @@
   else
     pad_edit_part_pad = 0
   endif
-  pad_edit_got_note = 0
+  pad_edit_got_note = NO
   pad_edit_hold = 1
   Log {Pad held: }, pad
   LabelPad pad, {Editing...} 
   Call @UpdateGUI
 @End
 
-
 @OnPadSingleTap // param: pad
-
   if uiMode = UIMODE_PADS and mode_pad_edit = 1
-    if (pad_edit_step > 7 AND pad > 7) OR (pad_edit_step < 7 AND pad < 7)    // pad and tapped pad are on the same row  
+    if (pad_edit_step > 7 AND pad > 7) OR (pad_edit_step <= 7 AND pad <= 7)  // pad and tapped pad are on the same row  
       Log {Exiting Pad Edit mode }
       mode_pad_edit = 0
       Call @UpdateGUI
-    else
-      if pad_edit_got_note = 1
-        LabelPad pad_edit_part_pad, {🔵}
+    else  
+      _note_part = (active_pattern * sizeof_pattern) + pad_edit_step * step_reso + (pad_edit_part_pad % step_reso)
+      if voice1[_note_part] > -1
+        LabelPad pad_edit_part_pad, {🔵}, (NoteName voice1[_note_part], YES), {:}, polycount[_note_part]
       else
         LabelPad pad_edit_part_pad, {⚪️}
       endif
+
       pad_edit_part = pad % step_reso // Only step_reso parts
       pad_edit_part_pad = pad // for UI usage like latching pad etc during edit
-      LabelPad pad_edit_part_pad, {🔴}
+      pad_edit_got_note = NO
+
+      _note_part = (active_pattern * sizeof_pattern) + pad_edit_step * step_reso + (pad_edit_part_pad % step_reso)
+      if voice1[_note_part] > -1
+        LabelPad pad_edit_part_pad, {🔴}, (NoteName voice1[_note_part], YES), {:}, polycount[_note_part]
+      else
+        LabelPad pad_edit_part_pad, {🔴}
+      endif
       LabelPads {⚠️ Editing }, pad_edit_step, {:} , pad_edit_part, {  ℹ️ SHIFT for voices }
   endif
 
@@ -305,7 +315,7 @@
     mode_pad_edit = 1
     pad_edit_step = pad
     pad_edit_part = 0
-    pad_edit_got_note = 0
+    pad_edit_got_note = NO
     if pad < 8
       pad_edit_part_pad = 8 // for UI usage like latching pad etc during edit
     else
@@ -496,8 +506,6 @@
 
 @OnMidiNoteOn
   _note_on_ticks = CurrentTimerTicks
-
-//  log {Midi Note On: }, MIDINote, { Vel: }, MIDIVelocity
   nn = MIDINote
   v = MIDIVelocity
 
@@ -514,8 +522,7 @@
   endif
   
   if mode_pad_edit = 1
-
-    pad_edit_got_note = 1
+    pad_edit_got_note = YES
     pad_note_part = pad_edit_step * step_reso + pad_edit_part // The note location for the pad being edited. 
 
     _step = pad_edit_step
@@ -588,12 +595,24 @@
 @End 
 
 @OnMidiNoteOff
+  SendMidiThru
+
+  if not ((record and HostRunning) or mode_pad_edit = 1)
+    Exit
+  endif
+
   nn = MIDINote
   v = MIDIVelocity
 
-  SendMidiThru
-
   _note_part = GetNoteState 0, nn
+
+  // Dont store anything unless state was set to <> -1. 
+  if _note_part = -1
+    Exit
+  endif
+  // Reset state to prevent OnMidiOff action when notes are played with recording off 
+  SetNoteState 0, nn, -1
+
   _note_pad = Div (_note_part - active_pattern * sizeof_pattern), step_reso
   Log {OFF: pad:}, _note_pad, { np:}, _note_part, { ap:},  active_pattern, { sp:}, sizeof_pattern, { sr:}, step_reso
   _on_ticks = noteOnTicks[_note_part]
@@ -609,7 +628,6 @@
     _elapsed_pct = _elapsed_ticks * timer_tick_resolution / noteTime * 100
   endif
 
-//   Log { Note On: }, _on_ticks, { Off: }, _off_ticks, { Elapsed: }, _elapsed_ticks, { = }, _elapsed_pct
   if not mode_pad_edit
     LabelPad _note_pad, (NoteName nn, YES), {:}, Round(_elapsed_pct) 
   endif
@@ -635,8 +653,6 @@
   elseif currentDivisor = 7
     LabelKnob 0, {2 bar}
   endif
-
-
 
   if LastKnob = 0
     currentDivisor = Round ((GetKnobValue 0) / 16)
@@ -669,10 +685,8 @@
     else
       noteTimeX[(active_pattern * sizeof_pattern) + note_part] = noteTimeX_knob
     endif
-//  elseif LastKnob = 2  
-//    gate = (GetKnobValue 2) / 100
+    LabelKnobs noteTimeX_knob*1.000, {%}
 
-  LabelKnobs noteTimeX_knob*1.000, {%}
   elseif LastKnob = 2  
     _probability = (GetKnobValue 2) / 127 * 100
     if mode_pad_edit = 1
@@ -742,7 +756,6 @@
 
   LabelKnob 7, {Probability}
   SetKnobValue 6, (TranslateScale note_probability[_edit_note_part], 0, 100, 0, 127)
-  
 @End
 
 @GUI_PadMode
@@ -798,8 +811,13 @@
       LabelPad _pad, {⚪️}
     endif
   endfor
-  
-  LabelPad pad_edit_part_pad, {🔴}
+
+  _note_part = (active_pattern * sizeof_pattern) + pad_edit_step * step_reso + (pad_edit_part_pad % step_reso)
+  if voice1[_note_part] > -1
+    LabelPad pad_edit_part_pad, {🔴}, (NoteName voice1[_note_part], YES), {:}, polycount[_note_part]
+  else
+    LabelPad pad_edit_part_pad, {🔴}
+  endif
   LabelPad pad_edit_step, {✅ Done}
   LabelPads {⚠️ Editing }, pad_edit_step, {:} , pad_edit_part, {  ℹ️ SHIFT for voices }
   LabelKnobs {Note settings}
@@ -1001,7 +1019,7 @@
   endif
 
   if pad_edit_hold and LastPad = pad_edit_step
-    pad_edit_got_note = 0
+    pad_edit_got_note = NO
     pad_edit_hold = 0
     mode_pad_edit = 0
     Log {PadUp for pad }, LastPad, {, exiting mode_pad_edit}
@@ -1056,4 +1074,5 @@
     
   Inspired by OP-Z and https://patchstorage.com/infinity
   Thanks to -ki for https://patchstorage.com/pad-manager-include
+
 @End
