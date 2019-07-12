@@ -128,6 +128,7 @@
 // Active_pattern when we have multi patterns? redundant?
 
 // What happens to note delay if youve live recorded, then edits a step? need to clear note delay
+// Bug, seems to be dead end when editing 7:7
 
 @InitSequencer
   if Unassigned polycount
@@ -284,12 +285,16 @@
       mode_pad_edit = 0
       Call @UpdateGUI
     else
-      LabelPad pad_edit_part_pad, {⚪️}
+      if pad_edit_got_note = 1
+        LabelPad pad_edit_part_pad, {🔵}
+      else
+        LabelPad pad_edit_part_pad, {⚪️}
+      endif
       pad_edit_part = pad % step_reso // Only step_reso parts
       pad_edit_part_pad = pad // for UI usage like latching pad etc during edit
       LabelPad pad_edit_part_pad, {🔴}
-      LabelPads {Editing step:part -- }, pad_edit_step, {:} , pad_edit_part, { -- SHIFT or step pad to exit }
-    endif
+      LabelPads {⚠️ Editing }, pad_edit_step, {:} , pad_edit_part, {  ℹ️ SHIFT for voices }
+  endif
 
 //  elseif uiMode = UIMODE_PADS and mode_pad_reset_step = 1 // something like this for a "performance mode"
     // reset_step = pad
@@ -571,8 +576,10 @@
   // Store part so that MidiNoteOff can reference all data of the note being played
   SetNoteState 0, nn, _note_part    
 
-  LabelPad _step, _poly_offset, {:}, (NoteName nn, YES) 
-  LatchPad _step, 1
+  if not mode_pad_edit
+    LabelPad _step, _poly_offset, {:}, (NoteName nn, YES) 
+    LatchPad _step, 1
+  endif
 
   Log {ON: step: }, _step,{ note_part: }, _note_part, {CPS: }‚ countPerStep, { tickCounter: }, tickCounter,  { Note: }, (Notename nn, YES)
 
@@ -603,7 +610,9 @@
   endif
 
 //   Log { Note On: }, _on_ticks, { Off: }, _off_ticks, { Elapsed: }, _elapsed_ticks, { = }, _elapsed_pct
-  LabelPad _note_pad, (NoteName nn, YES), {:}, Round(_elapsed_pct) 
+  if not mode_pad_edit
+    LabelPad _note_pad, (NoteName nn, YES), {:}, Round(_elapsed_pct) 
+  endif
   noteTimeX[_note_part] = _elapsed_pct  // elapsed as percentage of notetime
 @End
 
@@ -683,14 +692,12 @@
   call @UpdateGUI
 @End
 
-
 @UpdateGUI
   if uiMode = UIMODE_PADS AND mode_pad_edit = 1
     call @GUI_PadEditMode
 
   elseif uiMode = UIMODE_PADS
     call @GUI_PadMode
-//    LabelKnobs {P}, active_pattern+1, { settings}
 
   elseif uiMode = UIMODE_BUTTONS
     call @GUI_ButtonMode 
