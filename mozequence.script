@@ -99,6 +99,10 @@
   call @SetUIMode_Pads
 @End
 
+//  ___                        ___            
+//   | __  o _|_    _ __  _|    |  o __  _    
+//  _|_| | |  |_   (_|| |(_|    |  | |||(/_   
+
 @IncrementSequencer
   Inc tickCounter
   Inc total_tickCounter
@@ -127,11 +131,24 @@
   SetMetroPPQN PPQN[currentDivisor]
 @End
 
+@OnHostStart
+  step = 0
+  note_pos = 0
+  note_part = 0  
+  tickCounter = 0
+  total_tickCounter = 0
+  CurrentTimerTicks = 0  // "Optimistically" reset timer tick count on host start to reduce prob that it wraps during recording
+@End 
+
 @InitSequencer
   if Unassigned polycount
     Call @ClearSequencer
   endif
 @End
+
+//  ┌─┐┬  ┌─┐┌─┐┬─┐  ┌─┐┌─┐┌┬┐┌┬┐┌─┐┬─┐┌┐┌┌─┐
+//  │  │  ├┤ ├─┤├┬┘  ├─┘├─┤ │  │ ├┤ ├┬┘│││└─┐
+//  └─┘┴─┘└─┘┴ ┴┴└─  ┴  ┴ ┴ ┴  ┴ └─┘┴└─┘└┘└─┘
 
 @ClearSequencer
   FillArray polycount, 0
@@ -176,6 +193,11 @@
   FillArray note_probability[_pattern_start], 100 , sizeof_pattern
 @End
 
+//   _  _  ____  ____  ____   __   __ _   __   _  _  ____     ___    _  _  __  ____  __  
+//  ( \/ )(  __)(_  _)(  _ \ /  \ (  ( \ /  \ ( \/ )(  __)   ( _ \  ( \/ )(  )(    \(  ) 
+//  / \/ \ ) _)   )(   )   /(  O )/    /(  O )/ \/ \ ) _)   / _  /  / \/ \ )(  ) D ( )(  
+//  \_)(_/(____) (__) (__\_) \__/ \_)__) \__/ \_)(_/(____)  \__\_)  \_)(_/(__)(____/(__) 
+
 @OnMetroPulse   
   last_pulse_ticks = CurrentTimerTicks
 
@@ -186,7 +208,6 @@
   step_part = RoundDown(((tickCounter+1) / countPerStep) * step_reso) - 1
   note_part = (step * step_reso + step_part) // The note location in the wide grid
   
-//  Log {step_part: }, step_part, {  note_part: }, note_part, {  tickCounter: }, tickCounter, {  tc+1/cps: }, ((tickCounter+1)/countPerStep)
   for _active_pattern = 0 to 6 
     if (mode_multi_pattern = 0 and active_pattern=_active_pattern) or (mode_multi_pattern = 1 and playing_patterns[_active_pattern] = YES)
       _note_part = (_active_pattern * sizeof_pattern) + note_part
@@ -233,6 +254,135 @@
   Call @IncrementSequencer
 @End
 
+@OnMidiNoteOn
+  _note_on_ticks = CurrentTimerTicks
+  nn = MIDINote
+  v = MIDIVelocity
+
+  if transpose AND mode_pad_edit <> 1 
+    transposeNote = MIDINote - 48
+    LabelPads { Transpose: }, transposeNote
+    Exit
+  endif
+  
+  SendMidiThru
+
+  if not ((record and HostRunning) or mode_pad_edit = 1)
+    Exit
+  endif
+  
+  if mode_pad_edit = 1
+    pad_edit_got_note = YES
+    pad_note_part = pad_edit_step * step_reso + pad_edit_part // The note location for the pad being edited. 
+
+    _step = pad_edit_step
+    _note_part = (active_pattern * sizeof_pattern) + pad_note_part
+ 
+    if not Unassigned pad_edit_part_pad  // Latch and label when editing parts of step
+      LabelPad pad_edit_part_pad, (NoteName nn, YES)
+      LatchPad pad_edit_part_pad, 1
+    endif
+  else
+    _step = step
+    if quantize = QUANT_STEP
+      if step_part > 3 
+        _step = (_step  + 1) % 16
+      endif
+      _note_part = (active_pattern * sizeof_pattern) + _step * step_reso
+    else
+      _note_part = (active_pattern * sizeof_pattern) + note_part
+    endif
+  endif
+  
+  _poly_offset = polycount[_note_part]
+ 
+  if _poly_offset = 0
+    voice1[_note_part] = nn
+    voice1_velocity[_note_part] = v
+  elseif _poly_offset = 1
+    voice2[_note_part] = nn
+    voice2_velocity[_note_part] = v
+  elseif _poly_offset = 2
+    voice3[_note_part] = nn
+    voice3_velocity[_note_part] = v
+  elseif _poly_offset = 3
+    voice4[_note_part] = nn
+    voice4_velocity[_note_part] = v
+  elseif _poly_offset = 4
+    voice5[_note_part] = nn
+    voice5_velocity[_note_part] = v
+  elseif _poly_offset = 5
+    voice6[_note_part] = nn
+    voice6_velocity[_note_part] = v
+  endif
+
+  if _poly_offset < 8
+    Inc _poly_offset
+  endif
+
+  polycount[_note_part] = _poly_offset
+  noteOnTicks[_note_part] = CurrentTimerTicks //total_tickCounter
+
+  if quantize = QUANT_NONE and HostRunning  // we can only have delay if metronome is running
+    noteOnDelayTicks[_note_part] = _note_on_ticks - last_pulse_ticks
+  else
+    noteOnDelayTicks[_note_part] = 0
+  endif
+
+  // Store part so that MidiNoteOff can reference all data of the note being played
+  SetNoteState 0, nn, _note_part    
+
+  if not mode_pad_edit
+    LabelPad _step, _poly_offset, {:}, (NoteName nn, YES) 
+    LatchPad _step, 1
+  endif
+  last_note = nn      // for single-tap edit
+  last_velocity = nn  
+@End 
+
+@OnMidiNoteOff
+  SendMidiThru
+
+  if not ((record and HostRunning) or mode_pad_edit = 1)
+    Exit
+  endif
+
+  nn = MIDINote
+  v = MIDIVelocity
+
+  _note_part = GetNoteState 0, nn
+
+  // Dont store anything unless state was set to <> -1. 
+  if _note_part = -1
+    Exit
+  endif
+  // Reset state to prevent OnMidiOff action when notes are played with recording off 
+  SetNoteState 0, nn, -1
+
+  _note_pad = Div (_note_part - active_pattern * sizeof_pattern), step_reso
+  _on_ticks = noteOnTicks[_note_part]
+  _off_ticks = CurrentTimerTicks // total_tickCounter
+  _elapsed_ticks = _off_ticks - _on_ticks
+
+  // Special case:
+  // if transport is stopped or we have long steps (like 2 bars) we might get 0 ticks so we default to 1 step for these cases.
+  // we might also get negative elapse ticks if timer wrapped around the 16-bit int limit, so we just say 100% elapsed as a safeguard
+  if _elapsed_ticks <= 0
+    _elapsed_pct = 100
+  else
+    _elapsed_pct = _elapsed_ticks * timer_tick_resolution / noteTime * 100
+  endif
+
+  if not mode_pad_edit
+    LabelPad _note_pad, (NoteName nn, YES), {:}, Round(_elapsed_pct) 
+  endif
+  noteTimeX[_note_part] = _elapsed_pct  // elapsed as percentage of notetime
+@End
+
+//  ╔═╗╦ ╦╦╔═╗╔╦╗
+//  ╚═╗╠═╣║╠╣  ║ 
+//  ╚═╝╩ ╩╩╚   ╩ 
+
 @OnShiftDown
   if uiMode = UIMODE_PADS and mode_pad_edit = 1
     Call @SetUIMode_Voices 
@@ -251,6 +401,10 @@
 @OnShiftUp
 @End 
 
+//  ╔═╗╔═╗╔╦╗╔═╗   ┬   ╔╦╗╔═╗╔═╗╔═╗
+//  ╠═╝╠═╣ ║║╚═╗  ┌┼─   ║ ╠═╣╠═╝╚═╗
+//  ╩  ╩ ╩═╩╝╚═╝  └┘    ╩ ╩ ╩╩  ╚═╝
+
 @OnPadHold
   pad_edit_step = pad
   mode_pad_edit = 1
@@ -262,14 +416,12 @@
   endif
   pad_edit_got_note = NO
   pad_edit_hold = 1
-  Log {Pad held: }, pad
   LabelPad pad, {Editing...} 
   Call @UpdateGUI
 @End
 
 @OnPadSingleTap_InPadEdit
   if (pad_edit_step > 7 AND pad > 7) OR (pad_edit_step <= 7 AND pad <= 7)  // pad and tapped pad are on the same row  
-    Log {Exiting Pad Edit mode }
     mode_pad_edit = 0
     Call @UpdateGUI
   else  
@@ -338,7 +490,7 @@
     LabelPad BTN_RECORD, { Rec: }, record
 
   elseif pad = BTN_QUANTIZE
-    quantize = (quantize + 1) % 
+    quantize = (quantize + 1) % 3
     Call @UpdateGUI
 
   elseif pad = BTN_DUMP
@@ -381,8 +533,6 @@
 
       playing_patterns[_pattern] = _new_state
       LatchPad pad, playing_patterns[_pattern]
-
-      Log {Pattern }, _pattern + 1, {: }, _new_state      
     else
       last_active_pattern = active_pattern
       active_pattern = pad-8
@@ -418,6 +568,29 @@
   endif
 @End
 
+@OnPadDoubleTap
+  if mode_pad_edit = 1
+    del_step_part = pad % 8
+    del_step = pad_edit_step
+    del_step_pos = del_step * step_reso + del_step_part // The note location in the wide grid
+
+    polycount[(active_pattern * sizeof_pattern) + del_step_pos] = 0
+  
+    LatchPad pad, 0
+    LabelPad pad, { }
+  else
+    del_step = pad
+    del_note_part = del_step * step_reso // The note location in the wide grid
+
+    for po = 0 to step_reso
+      polycount[(active_pattern * sizeof_pattern) + (del_note_part + po)] = 0
+    endfor
+  
+    LatchPad del_step, 0
+    LabelPad del_step, { }
+  endif
+@End
+
 @SetUIMode_Pads
   uiMode = UIMODE_PADS
   ShowLayout 2
@@ -429,6 +602,10 @@
   uiMode = UIMODE_VOICES
   Call @UpdateGUI
 @End
+
+//  ╔═╗╔═╗╔═╗╦ ╦  ╔═╗╔═╗╔╦╗╔╦╗╔═╗╦═╗╔╗╔
+//  ║  ║ ║╠═╝╚╦╝  ╠═╝╠═╣ ║  ║ ║╣ ╠╦╝║║║
+//  ╚═╝╚═╝╩   ╩   ╩  ╩ ╩ ╩  ╩ ╚═╝╩╚═╝╚╝
 
 @CopyPattern
   _pattern = CopyPattern_pattern
@@ -468,168 +645,11 @@
   endfor
 @End
 
-@OnPadDoubleTap
 
-  if mode_pad_edit = 1
-    del_step_part = pad % 8
-    del_step = pad_edit_step
-    del_step_pos = del_step * step_reso + del_step_part // The note location in the wide grid
-
-    polycount[(active_pattern * sizeof_pattern) + del_step_pos] = 0
-  
-    LatchPad pad, 0
-    LabelPad pad, { }
-  else
-    del_step = pad
-    del_note_part = del_step * step_reso // The note location in the wide grid
-
-    for po = 0 to step_reso
-      polycount[(active_pattern * sizeof_pattern) + (del_note_part + po)] = 0
-    endfor
-  
-    LatchPad del_step, 0
-    LabelPad del_step, { }
-  endif
-@End
-
-@OnHostStart
-  step = 0
-  note_pos = 0
-  note_part = 0  
-  tickCounter = 0
-  total_tickCounter = 0
-  CurrentTimerTicks = 0  // "Optimistically" reset timer tick count on host start to reduce prob that it wraps during recording
-@End 
-
-@OnMidiNoteOn
-  _note_on_ticks = CurrentTimerTicks
-  nn = MIDINote
-  v = MIDIVelocity
-
-  if transpose AND mode_pad_edit <> 1 
-    transposeNote = MIDINote - 48
-    LabelPads { Transpose: }, transposeNote
-    Exit
-  endif
-  
-  SendMidiThru
-
-  if not ((record and HostRunning) or mode_pad_edit = 1)
-    Exit
-  endif
-  
-  if mode_pad_edit = 1
-    pad_edit_got_note = YES
-    pad_note_part = pad_edit_step * step_reso + pad_edit_part // The note location for the pad being edited. 
-
-    _step = pad_edit_step
-    _note_part = (active_pattern * sizeof_pattern) + pad_note_part
- 
-    if not Unassigned pad_edit_part_pad  // Latch and label when editing parts of step
-      Log {Latching pad}, pad_edit_part_pad
-      LabelPad pad_edit_part_pad, (NoteName nn, YES)
-      LatchPad pad_edit_part_pad, 1
-    endif
-  else
-    _step = step
-    if quantize = QUANT_STEP
-      if step_part > 3 
-        _step = (_step  + 1) % 16
-      endif
-      _note_part = (active_pattern * sizeof_pattern) + _step * step_reso
-    else
-      _note_part = (active_pattern * sizeof_pattern) + note_part
-    endif
-  endif
-  
-  _poly_offset = polycount[_note_part]
- 
-  if _poly_offset = 0
-    voice1[_note_part] = nn
-    voice1_velocity[_note_part] = v
-  elseif _poly_offset = 1
-    voice2[_note_part] = nn
-    voice2_velocity[_note_part] = v
-  elseif _poly_offset = 2
-    voice3[_note_part] = nn
-    voice3_velocity[_note_part] = v
-  elseif _poly_offset = 3
-    voice4[_note_part] = nn
-    voice4_velocity[_note_part] = v
-  elseif _poly_offset = 4
-    voice5[_note_part] = nn
-    voice5_velocity[_note_part] = v
-  elseif _poly_offset = 5
-    voice6[_note_part] = nn
-    voice6_velocity[_note_part] = v
-  endif
-
-  if _poly_offset < 8
-    Inc _poly_offset
-  endif
-
-  polycount[_note_part] = _poly_offset
-  noteOnTicks[_note_part] = CurrentTimerTicks //total_tickCounter
-
-  if quantize = QUANT_NONE and HostRunning  // we can only have delay if metronome is running
-    noteOnDelayTicks[_note_part] = _note_on_ticks - last_pulse_ticks
-  else
-    noteOnDelayTicks[_note_part] = 0
-  endif
-
-  // Store part so that MidiNoteOff can reference all data of the note being played
-  SetNoteState 0, nn, _note_part    
-
-  if not mode_pad_edit
-    LabelPad _step, _poly_offset, {:}, (NoteName nn, YES) 
-    LatchPad _step, 1
-  endif
-
-  Log {ON: step: }, _step,{ note_part: }, _note_part, {CPS: }‚ countPerStep, { tickCounter: }, tickCounter,  { Note: }, (Notename nn, YES)
-
-  last_note = nn      // for single-tap edit
-  last_velocity = nn  
-@End 
-
-@OnMidiNoteOff
-  SendMidiThru
-
-  if not ((record and HostRunning) or mode_pad_edit = 1)
-    Exit
-  endif
-
-  nn = MIDINote
-  v = MIDIVelocity
-
-  _note_part = GetNoteState 0, nn
-
-  // Dont store anything unless state was set to <> -1. 
-  if _note_part = -1
-    Exit
-  endif
-  // Reset state to prevent OnMidiOff action when notes are played with recording off 
-  SetNoteState 0, nn, -1
-
-  _note_pad = Div (_note_part - active_pattern * sizeof_pattern), step_reso
-  Log {OFF: pad:}, _note_pad, { np:}, _note_part, { ap:},  active_pattern, { sp:}, sizeof_pattern, { sr:}, step_reso
-  _on_ticks = noteOnTicks[_note_part]
-  _off_ticks = CurrentTimerTicks // total_tickCounter
-  _elapsed_ticks = _off_ticks - _on_ticks
-
-  // Special case:
-  // if transport is stopped or we have long steps (like 2 bars) we might get 0 ticks so we default to 1 step for these cases.
-  // we might also get negative elapse ticks if timer wrapped around the 16-bit int limit, so we just say 100% elapsed as a safeguard
-  if _elapsed_ticks <= 0
-    _elapsed_pct = 100
-  else
-    _elapsed_pct = _elapsed_ticks * timer_tick_resolution / noteTime * 100
-  endif
-
-  if not mode_pad_edit
-    LabelPad _note_pad, (NoteName nn, YES), {:}, Round(_elapsed_pct) 
-  endif
-  noteTimeX[_note_part] = _elapsed_pct  // elapsed as percentage of notetime
-@End
+//    _  ___  _  ___  ___ ___ 
+//   | |/ / \| |/ _ \| _ ) __|
+//   | ' <| .` | (_) | _ \__ \
+//   |_|\_\_|\_|\___/|___/___/'
 
 @OnKnobChange
 
@@ -702,6 +722,13 @@
   call @ComputeTimes
   call @UpdateGUI
 @End
+
+//   ██████╗ ██╗   ██╗██╗
+//  ██╔════╝ ██║   ██║██║
+//  ██║  ███╗██║   ██║██║
+//  ██║   ██║██║   ██║██║
+//  ╚██████╔╝╚██████╔╝██║
+//   ╚═════╝  ╚═════╝ ╚═╝
 
 @UpdateGUI
   if uiMode = UIMODE_PADS AND mode_pad_edit = 1
@@ -817,7 +844,7 @@
   endif
   LabelPad pad_edit_step, {✅ Done}
   LabelPads {⚠️ Editing }, pad_edit_step, {:} , pad_edit_part, {  ℹ️ SHIFT for voices }
-  LabelKnobs {Note settings}
+//  LabelKnobs {Note settings}
 
   Call @GUI_LabelKnobs
 @End
@@ -878,7 +905,6 @@
   LabelKnob 2, {Probability}
 @End
 
-
 @GUI_LabelKnobs_old
   if currentDivisor = 0
     LabelKnob 0, {1/32}
@@ -901,6 +927,10 @@
   LabelKnob 1, noteTimeX_knob*1.000
   LabelKnob 2, Round probability_knob
 @End
+
+//  ╔═╗╔═╗╔╦╗  ╔╦╗╔═╗╔╗╔╔═╗╔═╗╔═╗╦═╗
+//  ╠═╝╠═╣ ║║  ║║║╠═╣║║║╠═╣║ ╦║╣ ╠╦╝
+//  ╩  ╩ ╩═╩╝  ╩ ╩╩ ╩╝╚╝╩ ╩╚═╝╚═╝╩╚═
 
 @PadManagerOnLoad
   
@@ -1019,22 +1049,15 @@
     pad_edit_got_note = NO
     pad_edit_hold = 0
     mode_pad_edit = 0
-    Log {PadUp for pad }, LastPad, {, exiting mode_pad_edit}
     Call @UpdateGUI
   endif
 @End 
 
 @OnTimer 
   CurrentTimerTicks = (CurrentTimerTicks + 1) % 65534  // Wraps around every ~10 minutes
-
-//  If CurrentTimerTicks % 100 = 0
-//    Log {CTT: }, CurrentTimerTicks
-//  Endif   
-
   for pad = 0 to padMaxId
     if padActive[pad]
       Inc padTicks[pad]
-
       if padTicks[pad] > padAnalyseTicks
         if padTaps[pad] = 1
           if padHold[pad]
