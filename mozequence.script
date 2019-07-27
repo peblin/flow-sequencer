@@ -6,9 +6,6 @@
 // HMMM
 // When transposing in "Multi" - should all patterns be transposed, just armed or configurable per pattern? Maybe transpose is a pattern setting rather than "arm vs transpose" thing?
 
-// BUGS
-// What happens to note delay if youve live recorded, then edits a step? need to clear note delay
-
 @Onload
   ShowLayout 2
 
@@ -901,10 +898,12 @@
   SetKnobValue 5, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   LabelKnob 6, {Note time}
+  Log noteTimeX[_edit_note_part], { : }, (TranslateScale noteTimeX[_edit_note_part], 0, 800, 0, 127)
   SetKnobValue 6, (TranslateScale noteTimeX[_edit_note_part], 0, 800, 0, 127)
 
   LabelKnob 7, {Probability}
-  SetKnobValue 6, (TranslateScale note_probability[_edit_note_part], 0, 100, 0, 127)
+  Log note_probability[_edit_note_part], { : }, (TranslateScale note_probability[_edit_note_part], 0, 100, 0, 127)
+  SetKnobValue 7, (TranslateScale note_probability[_edit_note_part], 0, 100, 0, 127)
 @End
 
 @GUI_PadMode
