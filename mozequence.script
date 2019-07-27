@@ -3,6 +3,9 @@
 // ^^ Separate UI
 // Knob modes - "pads", "part edit", "buttons" (pattern settings)
 
+// HMMM
+// When transposing in "Multi" - should all patterns be transposed, just armed or configurable per pattern? Maybe transpose is a pattern setting rather than "arm vs transpose" thing?
+
 // BUGS
 // What happens to note delay if youve live recorded, then edits a step? need to clear note delay
 
@@ -55,7 +58,8 @@
 // tracks if a note was received while holding a pad - in which case we can exit pad edit mode on pad release
   pad_edit_got_note = YES
   pad_edit_hold = 0  
-  pad_edit_part_pad = 0 
+  pad_edit_part_pad = 0
+  pad_edit_note_part = 0 
 
   // states for UI
   
@@ -140,7 +144,6 @@
   noteTime = stepTime * gate
   SetMetroPPQN PPQN[currentDivisor]
 
-  Log {tickTime: }, tickTime, { stepTime: }, stepTime, { CPS: }, countPerStep, { noteTime: }, noteTime,  
 @End
 
 @OnHostStart
@@ -433,6 +436,9 @@
     pad_edit_got_note = NO
 
     _note_part = (active_pattern * sizeof_pattern) + pad_edit_step * step_reso + (pad_edit_part_pad % step_reso)
+
+    pad_edit_note_part = _note_part // used for Voices mode
+
     if voice1[_note_part] > -1
       LabelPad pad_edit_part_pad, {🔴}, (NoteName voice1[_note_part], YES), {:}, noteTimeX[_note_part]
     else
@@ -573,7 +579,18 @@
     del_step = pad_edit_step
     del_step_pos = del_step * step_reso + del_step_part // The note location in the wide grid
 
-    polycount[(active_pattern * sizeof_pattern) + del_step_pos] = 0
+    _del_note_part = (active_pattern * sizeof_pattern) + del_step_pos
+
+    polycount[del_note_part] = 0
+    voice1[_del_note_part] = -1
+    voice2[_del_note_part] = -1
+    voice3[_del_note_part] = -1
+    voice4[_del_note_part] = -1
+    voice5[_del_note_part] = -1
+    voice6[_del_note_part] = -1
+    velocity[_del_note_part] = 100
+    noteTimeX[_del_note_part] = 100
+
   
     LatchPad pad, 0
     LabelPad pad, { }
@@ -582,7 +599,16 @@
     del_note_part = del_step * step_reso // The note location in the wide grid
 
     for po = 0 to step_reso
-      polycount[(active_pattern * sizeof_pattern) + (del_note_part + po)] = 0
+      _del_note_part = (active_pattern * sizeof_pattern) + (del_note_part + po) 
+      polycount[_del_note_part] = 0
+      voice1[_del_note_part] = -1
+      voice2[_del_note_part] = -1
+      voice3[_del_note_part] = -1
+      voice4[_del_note_part] = -1
+      voice5[_del_note_part] = -1
+      voice6[_del_note_part] = -1
+      velocity[_del_note_part] = 100
+      noteTimeX[_del_note_part] = 100
     endfor
   
     LatchPad del_step, 0
@@ -627,17 +653,17 @@
 @ClearSequencer
   FillArray polycount, 0
   FillArray voice1, -1
-  FillArray voice1_velocity, 0
+  FillArray voice1_velocity, 100
   FillArray voice2, -1
-  FillArray voice2_velocity, 0
+  FillArray voice2_velocity, 100
   FillArray voice3, -1
-  FillArray voice3_velocity, 0
+  FillArray voice3_velocity, 100
   FillArray voice4, -1
-  FillArray voice4_velocity, 0
+  FillArray voice4_velocity, 100
   FillArray voice5, -1
-  FillArray voice5_velocity, 0
+  FillArray voice5_velocity, 100
   FillArray voice6, -1
-  FillArray voice6_velocity, 0
+  FillArray voice6_velocity, 100
   FillArray noteTimeX, 100
   FillArray noteOnTicks, 0
   FillArray noteOnDelayTicks, 0
@@ -649,17 +675,17 @@
   _pattern_start = active_pattern * sizeof_pattern
   FillArray polycount[_pattern_start], 0, sizeof_pattern
   FillArray voice1[_pattern_start], -1, sizeof_pattern
-  FillArray voice1_velocity[_pattern_start], 0, sizeof_pattern 
+  FillArray voice1_velocity[_pattern_start], 100, sizeof_pattern 
   FillArray voice2[_pattern_start], -1, sizeof_pattern 
-  FillArray voice2_velocity[_pattern_start], 0, sizeof_pattern 
+  FillArray voice2_velocity[_pattern_start], 100, sizeof_pattern 
   FillArray voice3[_pattern_start], -1, sizeof_pattern 
-  FillArray voice3_velocity[_pattern_start], 0, sizeof_pattern 
+  FillArray voice3_velocity[_pattern_start], 100, sizeof_pattern 
   FillArray voice4[_pattern_start], -1, sizeof_pattern 
-  FillArray voice4_velocity[_pattern_start], 0, sizeof_pattern 
+  FillArray voice4_velocity[_pattern_start], 100, sizeof_pattern 
   FillArray voice5[_pattern_start], -1, sizeof_pattern 
-  FillArray voice5_velocity[_pattern_start], 0, sizeof_pattern 
+  FillArray voice5_velocity[_pattern_start], 100, sizeof_pattern 
   FillArray voice6[_pattern_start], -1, sizeof_pattern
-  FillArray voice6_velocity[_pattern_start], 0, sizeof_pattern
+  FillArray voice6_velocity[_pattern_start], 100, sizeof_pattern
   FillArray noteTimeX[_pattern_start], 100, sizeof_pattern
   FillArray noteOnTicks[_pattern_start], 0, sizeof_pattern
   FillArray noteOnDelayTicks[_pattern_start], 0, sizeof_pattern
@@ -685,7 +711,57 @@
 //  ╩ ╩╝╚╝╚═╝╚═╝╚═╝
 
 @OnKnobChange
+  if uiMode = UIMODE_PADS or uiMode = UIMODE_BUTTONS
+    call @OnKnobChange_Pads
+  elseif uiMode = UIMODE_VOICES
+    call @OnKnobChange_Voices
+  endif
+@End
 
+@OnKnobChange_Voices
+  _part = pad_edit_note_part
+  _knob = LastKnob
+  _note = GetKnobValue _knob
+
+  _voice = _knob + 1
+ 
+  if polycount[_part] < _voice and _voice <= 6
+    polycount[_part] = _voice
+  endif
+  
+  if _knob = 0
+    voice1[_part] = _note
+    LabelKnob 0, (NoteName _note, YES)
+  elseif _knob = 1
+    voice2[_part] = _note
+    LabelKnob 1, (NoteName _note, YES)
+  elseif _knob = 2
+    voice3[_part] = _note
+    LabelKnob 2, (NoteName _note, YES)
+  elseif _knob = 3
+    voice4[_part] = _note
+    LabelKnob 3, (NoteName _note, YES)
+  elseif _knob = 4
+    voice5[_part] = _note
+    LabelKnob 4, (NoteName _note, YES)
+  elseif _knob = 5
+    voice6[_part] = _note
+    LabelKnob 5, (NoteName _note, YES)
+  elseif _knob = 6  // notetime
+    _ntx = Round((GetKnobValue 6) / 127 * 800)
+    noteTimeX[_part] = _ntx
+    LabelKnob 6, _ntx
+  elseif _knob = 7  // probability
+    _p = Round((GetKnobValue 7) / 127 * 100)
+    note_probability[_part] = _p
+    LabelKnob 7, _p
+  endif
+@End
+
+@OnKnobChange_Pads
+
+  Log {Knob _Pads}
+  
 // REFACTOR - doing unnecessary work 
 
   if currentDivisor = 0
@@ -736,7 +812,7 @@
       LabelKnobs noteTimeX_knob*1.000, {%}
     endif
   
-    if mode_pad_edit = 1 and noteTimeX_knob > 0
+    if mode_pad_edit = 1 and noteTimeX_knob > 0  // REFACTOR: use pad_edit_note_part below (and in other similar places)
       noteTimeX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = noteTimeX_knob
     endif
 
