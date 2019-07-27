@@ -345,7 +345,6 @@
   // Reset state to prevent OnMidiOff action when notes are played with recording off 
   SetNoteState 0, nn, -1
 
-
   _note_step = Div (_note_part - active_pattern * sizeof_pattern), step_reso
   _note_pad = _note_part - ((active_pattern * sizeof_pattern) + _note_step * step_reso)
   if _note_step < 8
@@ -377,6 +376,11 @@
     LabelPad _note_pad, {🔴}, (NoteName nn, YES), {:}, Round(noteTimeX[_note_part]) 
   endif
 @End
+
+@OnMidiCC
+  Log {CC: }, MIDIByte2, { - }, MidiByte3
+@End
+
 
 //  ╔═╗╦ ╦╦╔═╗╔╦╗
 //  ╚═╗╠═╣║╠╣  ║ 
@@ -581,7 +585,7 @@
 
     _del_note_part = (active_pattern * sizeof_pattern) + del_step_pos
 
-    polycount[del_note_part] = 0
+    polycount[_del_note_part] = 0
     voice1[_del_note_part] = -1
     voice2[_del_note_part] = -1
     voice3[_del_note_part] = -1
@@ -591,7 +595,6 @@
     velocity[_del_note_part] = 100
     noteTimeX[_del_note_part] = 100
 
-  
     LatchPad pad, 0
     LabelPad pad, { }
   else
@@ -615,7 +618,6 @@
     LabelPad del_step, { }
   endif
 @End
-
 
 
 //  ╔═╗╔═╗╔═╗╦ ╦  ╔═╗╔═╗╔╦╗╔╦╗╔═╗╦═╗╔╗╔
@@ -760,8 +762,6 @@
 
 @OnKnobChange_Pads
 
-  Log {Knob _Pads}
-  
 // REFACTOR - doing unnecessary work 
 
   if currentDivisor = 0
@@ -829,7 +829,6 @@
 
   elseif LastKnob = KNOB_MIDICH
     _midich = RoundDown((GetKnobValue KNOB_MIDICH) / 128 * 16)
-    log {Midi channel: }, _midich
     pattern_midich[active_pattern] = _midich
     LabelKnobs _midich + 1
   endif
@@ -1038,7 +1037,7 @@
   LabelKnob KNOB_NOTETIME, {Note time}
   LabelKnob KNOB_PROBABILITY, {Probability}
   LabelKnob KNOB_MIDICH, {Midi CH}
-  SetKnobValue KNOB_MIDICH, pattern_midich[active_pattern]*16+8 
+  SetKnobValue KNOB_MIDICH, pattern_midich[active_pattern]*8+4 
 @End
 
 //  ╔═╗╔═╗╔╦╗  ╔╦╗╔═╗╔╗╔╔═╗╔═╗╔═╗╦═╗
