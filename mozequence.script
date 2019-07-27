@@ -4,18 +4,19 @@
 // Knob modes - "pads", "part edit", "buttons" (pattern settings)
 
 // BUGS
-// Note Time knobs doesnt react
 // What happens to note delay if youve live recorded, then edits a step? need to clear note delay
 
 @Onload
   ShowLayout 2
 
   CurrentTimerTicks = 0
-  timer_tick_resolution = 10 // Milliseconds per tick
   last_pulse_ticks = 0
+  timer_tick_resolution = 5 // Milliseconds per tick
+
   Call @PadManagerOnLoad
 
   step_reso = 8  // Grid/parts per step
+  part_reso = 1 // REMOVE? Pulses per part
   poly = 6       // Max polyphony per part
   sizeof_pattern = 16*8      // Size of storing all step parts in an array
 
@@ -35,9 +36,16 @@
   BTN_CLEAR_ALL = 6
   BTN_CLEAR_ARMED = 7
 
+  // Knobs
+  KNOB_STEP = 0
+  KNOB_NOTETIME = 1
+  KNOB_PROBABILITY = 2
+  KNOB_MIDICH = 3
+  
   poly_offset = 0
   note_pos = 0
   note_part = 0
+  seq_step = 0 // this is internal to IncrementSequencer, use step below as its updated in "sync" with note_part and step_part
   step = 0
   pad_edit_step = 0
   
@@ -62,7 +70,8 @@
     mode_copy_pattern = NO
   endif
 
-  PPQN = [8*step_reso, 4*step_reso, 3*step_reso, 2*step_reso, step_reso, step_reso/2, step_reso/4, step_reso/8]
+  _res = step_reso * part_reso
+  PPQN = [8*_res, 4*_res, 3*_res, 2*_res, _res, _res/2, _res/4, _res/8]
 
   // quantization
   
@@ -72,21 +81,22 @@
   
   quantize = QUANT_NONE
 
+  
   // init knob defaults
   if Unassigned currentDivisor
-    currentDivisor = 1
+    currentDivisor = 3
     count = 1
     tickCounter = 0
     gate = 0.75
     swing = 0
-    noteTimeX_knob = 100
+    noteTimeX_knob = -1
     probability_knob = 100
   endif
 
-  SetKnobValue 0, 0
-  SetKnobValue 1, 64
-  SetKnobValue 2, 127
-  SetKnobValue 3, 64
+  SetKnobValue KNOB_STEP, 48          // 1/8
+  SetKnobValue KNOB_NOTETIME, 0       // As played
+  SetKnobValue KNOB_PROBABILITY, 127  // 100%
+  SetKnobValue KNOB_MIDICH, 1         // Default Midi Channel 1
 
   call @ComputeTimes
   Call @InitSequencer
@@ -99,9 +109,9 @@
   call @SetUIMode_Pads
 @End
 
-//  ___                        ___            
-//   | __  o _|_    _ __  _|    |  o __  _    
-//  _|_| | |  |_   (_|| |(_|    |  | |||(/_   
+//  ╦╔╗╔╦╔╦╗   ┬   ╔╦╗╦╔╦╗╔═╗
+//  ║║║║║ ║   ┌┼─   ║ ║║║║║╣ 
+//  ╩╝╚╝╩ ╩   └┘    ╩ ╩╩ ╩╚═╝  
 
 @IncrementSequencer
   Inc tickCounter
@@ -112,26 +122,29 @@
     
     if resetStepOnNewStep = 1
       resetStepOnNewStep = 0
-      step = reset_step
+      seq_step = reset_step
     else
-      Inc step
-      if step > 15
-        step = 0
+      Inc seq_step
+      if seq_step > 15
+        seq_step = 0
       endif
     endif
   endif
 @End 
 
 @ComputeTimes
-  tickTime = QuarterNote / PPQN[currentDivisor]
+  // tickTime == partTime ??
+  tickTime = QuarterNote / PPQN[currentDivisor] * part_reso 
   stepTime = tickTime * step_reso
-  countPerStep = step_reso 
-
+  countPerStep = step_reso * part_reso 
   noteTime = stepTime * gate
   SetMetroPPQN PPQN[currentDivisor]
+
+  Log {tickTime: }, tickTime, { stepTime: }, stepTime, { CPS: }, countPerStep, { noteTime: }, noteTime,  
 @End
 
 @OnHostStart
+  seq_step = 0
   step = 0
   note_pos = 0
   note_part = 0  
@@ -143,60 +156,13 @@
 @InitSequencer
   if Unassigned polycount
     Call @ClearSequencer
+    pattern_midich = [0,0,0,0,0,0,0]
   endif
 @End
 
-//  ┌─┐┬  ┌─┐┌─┐┬─┐  ┌─┐┌─┐┌┬┐┌┬┐┌─┐┬─┐┌┐┌┌─┐
-//  │  │  ├┤ ├─┤├┬┘  ├─┘├─┤ │  │ ├┤ ├┬┘│││└─┐
-//  └─┘┴─┘└─┘┴ ┴┴└─  ┴  ┴ ┴ ┴  ┴ └─┘┴└─┘└┘└─┘
-
-@ClearSequencer
-  FillArray polycount, 0
-  FillArray voice1, -1
-  FillArray voice1_velocity, 0
-  FillArray voice2, -1
-  FillArray voice2_velocity, 0
-  FillArray voice3, -1
-  FillArray voice3_velocity, 0
-  FillArray voice4, -1
-  FillArray voice4_velocity, 0
-  FillArray voice5, -1
-  FillArray voice5_velocity, 0
-  FillArray voice6, -1
-  FillArray voice6_velocity, 0
-  FillArray noteTimeX, 100
-  FillArray noteOnTicks, 0
-  FillArray noteOnDelayTicks, 0
-  FillArray note_probability, 100
-
-  playing_patterns = [ YES, NO, NO, NO, NO, NO, NO ]
-@End
-
-@ClearActivePattern
-  _pattern_start = active_pattern * sizeof_pattern
-  FillArray polycount[_pattern_start], 0, sizeof_pattern
-  FillArray voice1[_pattern_start], -1, sizeof_pattern
-  FillArray voice1_velocity[_pattern_start], 0, sizeof_pattern 
-  FillArray voice2[_pattern_start], -1, sizeof_pattern 
-  FillArray voice2_velocity[_pattern_start], 0, sizeof_pattern 
-  FillArray voice3[_pattern_start], -1, sizeof_pattern 
-  FillArray voice3_velocity[_pattern_start], 0, sizeof_pattern 
-  FillArray voice4[_pattern_start], -1, sizeof_pattern 
-  FillArray voice4_velocity[_pattern_start], 0, sizeof_pattern 
-  FillArray voice5[_pattern_start], -1, sizeof_pattern 
-  FillArray voice5_velocity[_pattern_start], 0, sizeof_pattern 
-  FillArray voice6[_pattern_start], -1, sizeof_pattern
-  FillArray voice6_velocity[_pattern_start], 0, sizeof_pattern
-  FillArray noteTimeX[_pattern_start], 100, sizeof_pattern
-  FillArray noteOnTicks[_pattern_start], 0, sizeof_pattern
-  FillArray noteOnDelayTicks[_pattern_start], 0, sizeof_pattern
-  FillArray note_probability[_pattern_start], 100 , sizeof_pattern
-@End
-
-//   _  _  ____  ____  ____   __   __ _   __   _  _  ____     ___    _  _  __  ____  __  
-//  ( \/ )(  __)(_  _)(  _ \ /  \ (  ( \ /  \ ( \/ )(  __)   ( _ \  ( \/ )(  )(    \(  ) 
-//  / \/ \ ) _)   )(   )   /(  O )/    /(  O )/ \/ \ ) _)   / _  /  / \/ \ )(  ) D ( )(  
-//  \_)(_/(____) (__) (__\_) \__/ \_)__) \__/ \_)(_/(____)  \__\_)  \_)(_/(__)(____/(__) 
+//  ╔╦╗╔═╗╔╦╗╦═╗╔═╗   ┬   ╔╦╗╦╔╦╗╦
+//  ║║║║╣  ║ ╠╦╝║ ║  ┌┼─  ║║║║ ║║║
+//  ╩ ╩╚═╝ ╩ ╩╚═╚═╝  └┘   ╩ ╩╩═╩╝╩
 
 @OnMetroPulse   
   last_pulse_ticks = CurrentTimerTicks
@@ -205,7 +171,12 @@
   // but we need to handle the "last part" so it can wrap over to next step as well as wrap
   // around at the end of the 16 steps
 
-  step_part = RoundDown(((tickCounter+1) / countPerStep) * step_reso) - 1
+  step = seq_step
+  step_part = Round(((tickCounter+1) / countPerStep) * step_reso) - 1
+  if step_part >= step_reso
+    step_part = 0
+    step = (step + 1) % 16
+  endif
   note_part = (step * step_reso + step_part) // The note location in the wide grid
   
   for _active_pattern = 0 to 6 
@@ -221,30 +192,31 @@
         _polycount = polycount[_note_part]
         _noteDelay = noteOnDelayTicks[_note_part] * timer_tick_resolution
         _noteTime = noteTime * (noteTimeX[_note_part] / 100) + _noteDelay
+        _ch = pattern_midich[_active_pattern]
 
         if _polycount > 5
-          SendMIDINoteOn 0, voice6[_note_part] + _transposeNote, voice6_velocity[_note_part], _noteDelay      
-          SendMIDINoteOff 0, voice6[_note_part] + _transposeNote, 0, _noteTime
+          SendMIDINoteOn _ch, voice6[_note_part] + _transposeNote, voice6_velocity[_note_part], _noteDelay      
+          SendMIDINoteOff _ch, voice6[_note_part] + _transposeNote, 0, _noteTime
         endif
         if _polycount > 4
-          SendMIDINoteOn 0, voice5[_note_part] + _transposeNote, voice5_velocity[_note_part], _noteDelay     
-          SendMIDINoteOff 0, voice5[_note_part] + _transposeNote, 0, _noteTime
+          SendMIDINoteOn _ch, voice5[_note_part] + _transposeNote, voice5_velocity[_note_part], _noteDelay     
+          SendMIDINoteOff _ch, voice5[_note_part] + _transposeNote, 0, _noteTime
         endif
         if _polycount > 3
-          SendMIDINoteOn 0, voice4[_note_part] + _transposeNote, voice4_velocity[_note_part], _noteDelay      
-          SendMIDINoteOff 0, voice4[_note_part] + _transposeNote, 0, _noteTime
+          SendMIDINoteOn _ch, voice4[_note_part] + _transposeNote, voice4_velocity[_note_part], _noteDelay      
+          SendMIDINoteOff _ch, voice4[_note_part] + _transposeNote, 0, _noteTime
         endif
         if _polycount > 2
-          SendMIDINoteOn 0, voice3[_note_part] + _transposeNote, voice3_velocity[_note_part], _noteDelay      
-          SendMIDINoteOff 0, voice3[_note_part] + _transposeNote, 0, _noteTime
+          SendMIDINoteOn _ch, voice3[_note_part] + _transposeNote, voice3_velocity[_note_part], _noteDelay      
+          SendMIDINoteOff _ch, voice3[_note_part] + _transposeNote, 0, _noteTime
         endif
         if _polycount > 1
-          SendMIDINoteOn 0, voice2[_note_part] + _transposeNote, voice2_velocity[_note_part], _noteDelay      
-          SendMIDINoteOff 0, voice2[_note_part] + _transposeNote, 0, _noteTime
+          SendMIDINoteOn _ch, voice2[_note_part] + _transposeNote, voice2_velocity[_note_part], _noteDelay      
+          SendMIDINoteOff _ch, voice2[_note_part] + _transposeNote, 0, _noteTime
         endif
         if _polycount > 0
-          SendMIDINoteOn 0, voice1[_note_part] + _transposeNote, voice1_velocity[_note_part], _noteDelay      
-          SendMIDINoteOff 0, voice1[_note_part] + _transposeNote, 0, _noteTime
+          SendMIDINoteOn _ch, voice1[_note_part] + _transposeNote, voice1_velocity[_note_part], _noteDelay      
+          SendMIDINoteOff _ch, voice1[_note_part] + _transposeNote, 0, _noteTime
         endif
       endif
     endif
@@ -256,6 +228,9 @@
 
 @OnMidiNoteOn
   _note_on_ticks = CurrentTimerTicks
+  _el_ticks = _note_on_ticks - last_pulse_ticks
+  _el_pct = (Round _el_ticks / (tickTime / timer_tick_resolution) * 100)
+  log {Part elapsed ticks: }, _el_ticks, { elapsed pct: }, _el_pct, {%}
   nn = MIDINote
   v = MIDIVelocity
 
@@ -265,9 +240,9 @@
     Exit
   endif
   
-  SendMidiThru
+  SendMidiThruOnCh pattern_midich[active_pattern]
 
-  if not ((record and HostRunning) or mode_pad_edit = 1)
+  if not ((record and HostRunning) or mode_pad_edit = 1) or (uiMode = UIMODE_BUTTONS)
     Exit
   endif
   
@@ -285,11 +260,15 @@
   else
     _step = step
     if quantize = QUANT_STEP
-      if step_part > 3 
+      if step_part > 5  // if we are within 25% of next step then quantize to that 
         _step = (_step  + 1) % 16
       endif
       _note_part = (active_pattern * sizeof_pattern) + _step * step_reso
     else
+      if quantize = QUANT_PART and _el_pct > 50
+        // if note is closer to next part, then quantize to that one
+        note_part = (note_part + (Round _el_pct/100)) % (16 * step_reso)
+      endif
       _note_part = (active_pattern * sizeof_pattern) + note_part
     endif
   endif
@@ -316,7 +295,7 @@
     voice6_velocity[_note_part] = v
   endif
 
-  if _poly_offset < 8
+  if _poly_offset < 6
     Inc _poly_offset
   endif
 
@@ -333,7 +312,9 @@
   SetNoteState 0, nn, _note_part    
 
   if not mode_pad_edit
-    LabelPad _step, _poly_offset, {:}, (NoteName nn, YES) 
+    if not UIMODE_BUTTONS
+      LabelPad _step, _poly_offset, {:}, (NoteName nn, YES) 
+    endif
     LatchPad _step, 1
   endif
   last_note = nn      // for single-tap edit
@@ -341,9 +322,11 @@
 @End 
 
 @OnMidiNoteOff
-  SendMidiThru
 
-  if not ((record and HostRunning) or mode_pad_edit = 1)
+// REFACTOR: Need to send explicit midi command with velocity set to noteTimeX_knob (or "As Played")
+  SendMidiThruOnCh pattern_midich[active_pattern]
+
+  if not ((record and HostRunning) or mode_pad_edit = 1) or transpose or (uiMode = UIMODE_BUTTONS)
     Exit
   endif
 
@@ -359,7 +342,13 @@
   // Reset state to prevent OnMidiOff action when notes are played with recording off 
   SetNoteState 0, nn, -1
 
-  _note_pad = Div (_note_part - active_pattern * sizeof_pattern), step_reso
+
+  _note_step = Div (_note_part - active_pattern * sizeof_pattern), step_reso
+  _note_pad = _note_part - ((active_pattern * sizeof_pattern) + _note_step * step_reso)
+  if _note_step < 8
+    _note_pad = _note_pad + 8
+  endif
+
   _on_ticks = noteOnTicks[_note_part]
   _off_ticks = CurrentTimerTicks // total_tickCounter
   _elapsed_ticks = _off_ticks - _on_ticks
@@ -373,10 +362,17 @@
     _elapsed_pct = _elapsed_ticks * timer_tick_resolution / noteTime * 100
   endif
 
-  if not mode_pad_edit
-    LabelPad _note_pad, (NoteName nn, YES), {:}, Round(_elapsed_pct) 
+  if noteTimeX_knob < 0
+    noteTimeX[_note_part] = _elapsed_pct  // elapsed as percentage of notetime
+  else
+    noteTimeX[_note_part] = noteTimeX_knob  // Set fixed note time from knob
   endif
-  noteTimeX[_note_part] = _elapsed_pct  // elapsed as percentage of notetime
+
+  if not mode_pad_edit 
+    LabelPad _note_step, (NoteName nn, YES), {:}, Round(noteTimeX[_note_part]) 
+  else
+    LabelPad _note_pad, {🔴}, (NoteName nn, YES), {:}, Round(noteTimeX[_note_part]) 
+  endif
 @End
 
 //  ╔═╗╦ ╦╦╔═╗╔╦╗
@@ -427,7 +423,7 @@
   else  
     _note_part = (active_pattern * sizeof_pattern) + pad_edit_step * step_reso + (pad_edit_part_pad % step_reso)
     if voice1[_note_part] > -1
-      LabelPad pad_edit_part_pad, {🔵}, (NoteName voice1[_note_part], YES), {:}, polycount[_note_part]
+      LabelPad pad_edit_part_pad, {🔵}, (NoteName voice1[_note_part], YES), {:}, (Round noteTimeX[_note_part])
     else
       LabelPad pad_edit_part_pad, {⚪️}
     endif
@@ -438,7 +434,7 @@
 
     _note_part = (active_pattern * sizeof_pattern) + pad_edit_step * step_reso + (pad_edit_part_pad % step_reso)
     if voice1[_note_part] > -1
-      LabelPad pad_edit_part_pad, {🔴}, (NoteName voice1[_note_part], YES), {:}, polycount[_note_part]
+      LabelPad pad_edit_part_pad, {🔴}, (NoteName voice1[_note_part], YES), {:}, noteTimeX[_note_part]
     else
       LabelPad pad_edit_part_pad, {🔴}
     endif
@@ -487,7 +483,7 @@
     
   elseif pad = BTN_RECORD
     record = not record
-    LabelPad BTN_RECORD, { Rec: }, record
+    Call @UpdateGUI
 
   elseif pad = BTN_QUANTIZE
     quantize = (quantize + 1) % 3
@@ -569,7 +565,10 @@
 @End
 
 @OnPadDoubleTap
-  if mode_pad_edit = 1
+  if uiMode = UIMODE_BUTTONS
+    Exit
+  endif
+  if mode_pad_edit = 1 
     del_step_part = pad % 8
     del_step = pad_edit_step
     del_step_pos = del_step * step_reso + del_step_part // The note location in the wide grid
@@ -591,17 +590,7 @@
   endif
 @End
 
-@SetUIMode_Pads
-  uiMode = UIMODE_PADS
-  ShowLayout 2
-  Call @UpdateGUI
-  LabelKnobs {P}, active_pattern+1, { settings }
-@End
 
-@SetUIMode_Voices
-  uiMode = UIMODE_VOICES
-  Call @UpdateGUI
-@End
 
 //  ╔═╗╔═╗╔═╗╦ ╦  ╔═╗╔═╗╔╦╗╔╦╗╔═╗╦═╗╔╗╔
 //  ║  ║ ║╠═╝╚╦╝  ╠═╝╠═╣ ║  ║ ║╣ ╠╦╝║║║
@@ -631,6 +620,52 @@
   CopyArray note_probability[_src_pattern_pos], note_probability[_dest_pattern_pos], sizeof_pattern
 @End
 
+//  ┌─┐┬  ┌─┐┌─┐┬─┐  ┌─┐┌─┐┌┬┐┌┬┐┌─┐┬─┐┌┐┌┌─┐
+//  │  │  ├┤ ├─┤├┬┘  ├─┘├─┤ │  │ ├┤ ├┬┘│││└─┐
+//  └─┘┴─┘└─┘┴ ┴┴└─  ┴  ┴ ┴ ┴  ┴ └─┘┴└─┘└┘└─┘
+
+@ClearSequencer
+  FillArray polycount, 0
+  FillArray voice1, -1
+  FillArray voice1_velocity, 0
+  FillArray voice2, -1
+  FillArray voice2_velocity, 0
+  FillArray voice3, -1
+  FillArray voice3_velocity, 0
+  FillArray voice4, -1
+  FillArray voice4_velocity, 0
+  FillArray voice5, -1
+  FillArray voice5_velocity, 0
+  FillArray voice6, -1
+  FillArray voice6_velocity, 0
+  FillArray noteTimeX, 100
+  FillArray noteOnTicks, 0
+  FillArray noteOnDelayTicks, 0
+  FillArray note_probability, 100
+  playing_patterns = [ YES, NO, NO, NO, NO, NO, NO ]
+@End
+
+@ClearActivePattern
+  _pattern_start = active_pattern * sizeof_pattern
+  FillArray polycount[_pattern_start], 0, sizeof_pattern
+  FillArray voice1[_pattern_start], -1, sizeof_pattern
+  FillArray voice1_velocity[_pattern_start], 0, sizeof_pattern 
+  FillArray voice2[_pattern_start], -1, sizeof_pattern 
+  FillArray voice2_velocity[_pattern_start], 0, sizeof_pattern 
+  FillArray voice3[_pattern_start], -1, sizeof_pattern 
+  FillArray voice3_velocity[_pattern_start], 0, sizeof_pattern 
+  FillArray voice4[_pattern_start], -1, sizeof_pattern 
+  FillArray voice4_velocity[_pattern_start], 0, sizeof_pattern 
+  FillArray voice5[_pattern_start], -1, sizeof_pattern 
+  FillArray voice5_velocity[_pattern_start], 0, sizeof_pattern 
+  FillArray voice6[_pattern_start], -1, sizeof_pattern
+  FillArray voice6_velocity[_pattern_start], 0, sizeof_pattern
+  FillArray noteTimeX[_pattern_start], 100, sizeof_pattern
+  FillArray noteOnTicks[_pattern_start], 0, sizeof_pattern
+  FillArray noteOnDelayTicks[_pattern_start], 0, sizeof_pattern
+  FillArray note_probability[_pattern_start], 100 , sizeof_pattern
+@End
+
 @DumpNotes
   for _pattern = 0 to 7
     for _step = 0 to 15
@@ -645,13 +680,13 @@
   endfor
 @End
 
-
-//    _  ___  _  ___  ___ ___ 
-//   | |/ / \| |/ _ \| _ ) __|
-//   | ' <| .` | (_) | _ \__ \
-//   |_|\_\_|\_|\___/|___/___/'
+//  ╦╔═╔╗╔╔═╗╔╗ ╔═╗
+//  ╠╩╗║║║║ ║╠╩╗╚═╗
+//  ╩ ╩╝╚╝╚═╝╚═╝╚═╝
 
 @OnKnobChange
+
+// REFACTOR - doing unnecessary work 
 
   if currentDivisor = 0
     LabelKnob 0, {1/32}
@@ -671,7 +706,7 @@
     LabelKnob 0, {2 bar}
   endif
 
-  if LastKnob = 0
+  if LastKnob = KNOB_STEP
     currentDivisor = Round ((GetKnobValue 0) / 16)
     if currentDivisor = 0
       LabelKnobs {1/32}
@@ -690,21 +725,22 @@
     elseif currentDivisor = 7
       LabelKnobs {2 bar}
     endif
+    call @ComputeTimes
 
-  elseif LastKnob = 1
+  elseif LastKnob = KNOB_NOTETIME
     noteTimeX_knob = Round((GetKnobValue 1) / 127 * 800)  
     if noteTimeX_knob < 6.25
-      noteTimeX_knob = 6.25     // So noteTimeX_knox will be between 6.25 (equiv of a 1/64 note) and 800 of the note time, scaled down to % (1/100) later
+      noteTimeX_knob = -1 // "As Played"
+      LabelKnobs {As Played}
+    else
+      LabelKnobs noteTimeX_knob*1.000, {%}
     endif
   
-    if mode_pad_edit = 1
+    if mode_pad_edit = 1 and noteTimeX_knob > 0
       noteTimeX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = noteTimeX_knob
-    else
-      noteTimeX[(active_pattern * sizeof_pattern) + note_part] = noteTimeX_knob
     endif
-    LabelKnobs noteTimeX_knob*1.000, {%}
 
-  elseif LastKnob = 2  
+  elseif LastKnob = KNOB_PROBABILITY
     _probability = (GetKnobValue 2) / 127 * 100
     if mode_pad_edit = 1
       note_probability[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _probability
@@ -715,12 +751,14 @@
     probability_knob = _probability
     LabelKnobs (Round probability_knob), {%}
 
-  elseif LastKnob = 3
-    swing = (GetKnobValue 3) / 127
+  elseif LastKnob = KNOB_MIDICH
+    _midich = RoundDown((GetKnobValue KNOB_MIDICH) / 128 * 16)
+    log {Midi channel: }, _midich
+    pattern_midich[active_pattern] = _midich
+    LabelKnobs _midich + 1
   endif
 
-  call @ComputeTimes
-  call @UpdateGUI
+//  call @UpdateGUI
 @End
 
 //   ██████╗ ██╗   ██╗██╗
@@ -729,6 +767,18 @@
 //  ██║   ██║██║   ██║██║
 //  ╚██████╔╝╚██████╔╝██║
 //   ╚═════╝  ╚═════╝ ╚═╝
+
+@SetUIMode_Pads
+  uiMode = UIMODE_PADS
+  ShowLayout 2
+  Call @UpdateGUI
+  LabelKnobs {P}, active_pattern+1, { settings }
+@End
+
+@SetUIMode_Voices
+  uiMode = UIMODE_VOICES
+  Call @UpdateGUI
+@End
 
 @UpdateGUI
   if uiMode = UIMODE_PADS AND mode_pad_edit = 1
@@ -739,7 +789,7 @@
 
   elseif uiMode = UIMODE_BUTTONS
     call @GUI_ButtonMode 
-    LabelKnobs {P}, active_pattern+1, { settings}
+    call @GUI_LabelKnobs
  
   elseif uiMode = UIMODE_VOICES
      call @GUI_VoicesMode
@@ -787,24 +837,21 @@
   for _step = 0 to 15
     _voice_cnt = 0
     _part_cnt = 0
-    for _part = 0 to step_reso-1
-      _voice_part_cnt = polycount[(active_pattern * sizeof_pattern) + (_step * step_reso + _part)]
-      if _voice_part_cnt > 0
-        _voice_cnt = _voice_cnt + _voice_part_cnt
-        Inc _part_cnt
-      endif
-    endfor
+    _po = (active_pattern * sizeof_pattern) + (_step * step_reso)
 
-    if _part_cnt > 0
+    _pc = polycount[_po+0] + polycount[_po+1] + polycount[_po+2] + polycount[_po+3] + polycount[_po+4] + polycount[_po+5] + polycount[_po+6] + polycount[_po+7]
+
+    if _pc > 0
       LatchPad _step, 1
-      LabelPad _step, _part_cnt, {:}, _voice_cnt, {:}, Round(noteTimeX[(active_pattern * sizeof_pattern) + (_step * step_reso)])
+      // Row below triggers parser bug in Mozaic if there are spaces after commas
+      LabelPad _step,polycount[_po+0],polycount[_po+1],polycount[_po+2],polycount[_po+3],polycount[_po+4],polycount[_po+5],polycount[_po+6],polycount[_po+7]
     else
       LatchPad _step, 0
       LabelPad _step, { }
     endif
   endfor
   
-  if transpose and mode_multi_pattern
+ if transpose and mode_multi_pattern
     LabelPads  {P}, active_pattern+1,{ ⚪️ }, { transpose: }, transpose, { Play: Multi}, { quant: }, quantize
   elseif transpose
     LabelPads  {P}, active_pattern+1,{ ⚪️ SOLO}, { transpose: }, transpose, { quant: }, quantize
@@ -813,7 +860,7 @@
   elseif record
     LabelPads  {P}, active_pattern+1,{ 🔴 SOLO}, { quant: }, quantize
   endif
-
+  
 @End
 
 @GUI_PadEditMode
@@ -844,7 +891,6 @@
   endif
   LabelPad pad_edit_step, {✅ Done}
   LabelPads {⚠️ Editing }, pad_edit_step, {:} , pad_edit_part, {  ℹ️ SHIFT for voices }
-//  LabelKnobs {Note settings}
 
   Call @GUI_LabelKnobs
 @End
@@ -855,10 +901,20 @@
     LabelPad po, { }
     LatchPad po, 0
   endfor
+  
+  if transpose
+    LabelPad BTN_TRANSPOSE, {⚠️transp ON}
+  else
+    LabelPad BTN_TRANSPOSE, {transp OFF}
+  endif
 
-  LabelPad BTN_TRANSPOSE, {Transpose:}, transpose
   LabelPad BTN_CLEAR_ALL, {Clear all}
-  LabelPad BTN_RECORD, {Live rec:}, record
+
+  if record
+    LabelPad BTN_RECORD, {live rec 🔴}
+  else
+    LabelPad BTN_RECORD, {live rec ⚪}
+  endif
   LabelPad BTN_DUMP, {Dump}
   LabelPad BTN_COPY_PATTERN, {Copy pattern}
   LabelPad BTN_CLEAR_ARMED, {Clear armed}
@@ -877,11 +933,11 @@
       if playing_patterns[_pattern] = 1 and active_pattern = _pattern
         LabelPad _pattern + 8, {P}, _pattern+1, {🔴 ON}
       elseif playing_patterns[_pattern] = 1 and active_pattern <> _pattern
-        LabelPad _pattern + 8, {P}, _pattern+1, {ON}
+        LabelPad _pattern + 8, {P}, _pattern+1, { ON}
       elseif playing_patterns[_pattern] = 0 and active_pattern = _pattern
         LabelPad _pattern + 8, {P}, _pattern+1, {🔴 OFF}
       else
-        LabelPad _pattern + 8, {P}, _pattern+1, {OFF}
+        LabelPad _pattern + 8, {P}, _pattern+1, { OFF}
       endif
     endfor
   else
@@ -900,32 +956,13 @@
 @End
 
 @GUI_LabelKnobs
-  LabelKnob 0, {Step}
-  LabelKnob 1, {Note time}
-  LabelKnob 2, {Probability}
-@End
+  LabelKnobs {P}, active_pattern+1, { settings}
 
-@GUI_LabelKnobs_old
-  if currentDivisor = 0
-    LabelKnob 0, {1/32}
-  elseif currentDivisor = 1
-    LabelKnob 0, {1/16}
-  elseif currentDivisor = 2
-    LabelKnob 0, {1/8t}
-  elseif currentDivisor = 3
-    LabelKnob 0, {1/8}
-  elseif currentDivisor = 4
-    LabelKnob 0, {1/4}
-  elseif currentDivisor = 5
-    LabelKnob 0, {1/2}
-  elseif currentDivisor = 6
-    LabelKnob 0, {bar}
-  elseif currentDivisor = 7
-    LabelKnob 0, {2 bar}
-  endif
-
-  LabelKnob 1, noteTimeX_knob*1.000
-  LabelKnob 2, Round probability_knob
+  LabelKnob KNOB_STEP, {Step}
+  LabelKnob KNOB_NOTETIME, {Note time}
+  LabelKnob KNOB_PROBABILITY, {Probability}
+  LabelKnob KNOB_MIDICH, {Midi CH}
+  SetKnobValue KNOB_MIDICH, pattern_midich[active_pattern]*16+8 
 @End
 
 //  ╔═╗╔═╗╔╦╗  ╔╦╗╔═╗╔╗╔╔═╗╔═╗╔═╗╦═╗
