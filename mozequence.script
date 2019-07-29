@@ -839,12 +839,11 @@
   SetKnobValue 5, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   LabelKnob 6, {Note time}
-  Log noteTimeX[_edit_note_part], { : }, (TranslateScale noteTimeX[_edit_note_part], 0, 800, 0, 127)
   SetKnobValue 6, (TranslateScale noteTimeX[_edit_note_part], 0, 800, 0, 127)
 
   LabelKnob 7, {Probability}
-  Log note_probability[_edit_note_part], { : }, (TranslateScale note_probability[_edit_note_part], 0, 100, 0, 127)
   SetKnobValue 7, (TranslateScale note_probability[_edit_note_part], 0, 100, 0, 127)
+  LabelKnobs {⚠️ Voices for }, pad_edit_step, {:} , pad_edit_part, {  ℹ️ SHIFT to go back }
 @End
 
 @GUI_PadMode
@@ -1128,7 +1127,7 @@
 // <<<<<<<<< end of Pad Manager script code >>>>>
 
 @Description
-  Multi-pattern, multi-channel, 16x8 step midi looper & sequencer for Mozaic by peblin.
+  FLOW 7 - 7-pattern, multi-channel, 16x8 step midi looper & sequencer for Mozaic by peblin.
   Featuring:
 
   - 16 steps with 8 subdivisions (parts) each
@@ -1145,7 +1144,7 @@
 
 -- Basics --
 
-The sequencer consists of 16 steps per pattern. Each step is divided into 8 parts - so each part is 1/8 of step length. For example, setting step length using the Step knob to 1 bar, makes each part of the step a 1/8th note.
+F7's sequencer consists of 16 steps per pattern. Each step is divided into 8 parts - so each part is 1/8 of step length. For example, setting step length using the Step knob to 1 bar, makes each part of the step a 1/8th note.
 
 To get started, just start the host and start playing - the sequencer records whatever you play into the appropriate part and plays is back just as you played it. Double-tap to erase steps & parts, and single-tap on a step to edit its parts.
 
@@ -1161,9 +1160,9 @@ Record into the sequencer using either live recording or step recording.
 
 --- Live recording & Quantization ---
 
-In this mode the sequencer records notes, velocities and (optionally) duration into the corresponding part. Live recording has three quantization modes - None, Part and Step. Set the quantisation mode by tapping the Quant button - it cycles between the modes.
+In this mode the sequencer records notes, velocities and (optionally) duration into the corresponding part. Live recording has three quantization modes - None, Part and Step. Set the quantisation mode by tapping the Quant button in Control Panel - it cycles between the modes.
 
-- None; This aims to reproduce what you played as close to the original as possible. It keeps the timing of your playing by keeping track of the delay of the "note on" message to when the part started and will delay any playback with the same amount.
+- None; This aims to reproduce what you played as close to the original as possible. It keeps the timing of your playing by keeping track of the delay of the "note on" message to when the part started and will delay any playback with the same amount. The accuracy of the delay is 5 milliseconds for now.
 - Part; This will quantize to nearest part (pushing note forward to next part if that is closer in time)
 - Step; This will quantize to nearest step (pushing note forward to next step if its within 25% of the next step in time)
 
@@ -1171,10 +1170,10 @@ The sequencer has 6 voice polyphony per part, but only stores timing latency "pe
 
 --- Step recording ---
 
-In this mode, you select which step/part to edit, then enter up to 6 notes for it. When editing a step, you're actually editing the first part of the step. 
+In this mode you select which step/part to edit, then play up to 6 notes for it. When editing a step, you're actually editing the first part of the step. 
 
 The sequencer supports both "latched" and "hold pad" editing. 
-- Latched; Simply tap the step you want to edit, then tap the part from all parts showing on the row above or below the chosen step. Finish editing by tapping the step again, which is now labeled "✅ Done".
+- Latched; Simply tap the step you want to edit, then tap the part from all parts showing on the row above or below the chosen step. Finish recording/editing by tapping the step again, which is now labeled "✅ Done".
 - Hold pad; Hold the step you want to edit, then tap the part from all parts showing on the row above or below the chosen step. Finish by releasing the held pad. 
 
 Latched is really helpful on iPhone, while "hold pad" might be quicker on the iPad.
@@ -1234,11 +1233,10 @@ To copy a pattern, first make sure it's the armed pattern then press "Copy Patte
 "Clear armed" will clear the currently armed pattern, except for midi channel.
 "Clear all" will clear all patterns. To prevent accidental disaster, "Clear all" requires you to long-press on the button, while "Clear armed" is immediate.
 
-
 - THANKS -
 
   Inspired by OP-Z and https://patchstorage.com/infinity
-  Thanks to -ki for https://patchstorage.com/pad-manager-include
+  Thanks to -ki for https://patchstorage.com/pad-manager-include and great contributions to the community
 
   And most of all thanks to Bram Bos for creating one of the most game-changing iOS music apps ever.
 
