@@ -216,12 +216,13 @@
     Exit
   endif
   
-  SendMidiThruOnCh pattern_midich[active_pattern]
-
   if not ((record and HostRunning) or mode_pad_edit = 1) or (uiMode = UIMODE_BUTTONS)
+    SendMidiThruOnCh pattern_midich[active_pattern]
     Exit
   endif
   
+  _supressMidiThru = NO
+ 
   if mode_pad_edit = 1
     pad_edit_got_note = YES
     pad_note_part = pad_edit_step * step_reso + pad_edit_part // The note location for the pad being edited. 
@@ -233,22 +234,30 @@
       LabelPad pad_edit_part_pad, (NoteName nn, YES)
       LatchPad pad_edit_part_pad, 1
     endif
+
+    _supressMidiThru = YES
   else
     _step = step
     if quantize = QUANT_STEP
       if step_part > 5  // if we are within 25% of next step then quantize to that 
         _step = (_step  + 1) % 16
+        _supressMidiThru = YES
       endif
       _note_part = (active_pattern * sizeof_pattern) + _step * step_reso
     else
       if quantize = QUANT_PART and _el_pct > 50
         // if note is closer to next part, then quantize to that one
         note_part = (note_part + (Round _el_pct/100)) % (16 * step_reso)
+        _supressMidiThru = YES
       endif
       _note_part = (active_pattern * sizeof_pattern) + note_part
     endif
   endif
-  
+
+  if not _supressMidiThru
+    SendMidiThruOnCh pattern_midich[active_pattern]
+  endif
+
   _poly_offset = polycount[_note_part]
  
   if _poly_offset = 0
