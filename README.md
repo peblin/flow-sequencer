@@ -1,4 +1,4 @@
-# mozequence
+# Flow
 
 Multi-pattern sequencer for Mozaic.
 Featuring:
