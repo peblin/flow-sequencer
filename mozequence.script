@@ -16,15 +16,17 @@
   UIMODE_PADS = 1
   UIMODE_BUTTONS = 2
   UIMODE_VOICES = 3
+  UIMODE_HELP = 4
 
   // Buttons
   BTN_MULTI_PATTERN = 0
   BTN_RECORD = 1
   BTN_QUANTIZE = 2
   BTN_TRANSPOSE = 3
-  BTN_COPY_PATTERN = 5
-  BTN_CLEAR_ALL = 6
-  BTN_CLEAR_ARMED = 7
+  BTN_COPY_PATTERN = 4
+  BTN_CLEAR_ALL = 5
+  BTN_CLEAR_ARMED = 6
+  BTN_HELP = 7
 
   // Knobs
   KNOB_STEP = 0
@@ -361,12 +363,11 @@
   elseif uiMode = UIMODE_VOICES
     Call @SetUIMode_Pads
   elseif uiMode = UIMODE_PADS
-    uiMode = UIMODE_BUTTONS // "button" mode
-    Call @UpdateGUI
+    Call @SetUIMode_Buttons
   elseif uiMode = UIMODE_BUTTONS
-    uiMode = UIMODE_PADS // pad mode
-    mode_copy_pattern = NO
-    Call @UpdateGUI
+    Call @SetUIMode_Pads
+  elseif uiMode = UIMODE_HELP
+    Call @SetUIMode_Buttons
   endif
 @End 
 
@@ -395,7 +396,9 @@
     if pad = BTN_CLEAR_ALL
       LabelPad BTN_CLEAR_ALL, {✅Cleared}
       Call @ClearSequencer
-      Call @UpdateGUI
+    elseif pad = BTN_CLEAR_ARMED
+      LabelPad BTN_CLEAR_ARMED, {✅Cleared}
+      Call @ClearActivePattern
     elseif pad >= 8 and pad <= 14
       if mode_multi_pattern
         _pattern = pad - 8
@@ -452,6 +455,11 @@
   else
     pad_edit_part_pad = 0
   endif
+
+  _note_part = (active_pattern * sizeof_pattern) + pad_edit_step * step_reso + (pad_edit_part_pad % step_reso)
+
+  pad_edit_note_part = _note_part // used for Voices mode
+  
   Call @UpdateGUI
 @End
 
@@ -479,9 +487,13 @@
     LabelPads {⚠️Transpose: }, transpose
 
   elseif pad = BTN_CLEAR_ALL
-      LabelPads {⚠️ Hold Clear All pad to clear all patterns ⚠️}
-      LabelPad BTN_CLEAR_ALL, {️⚠️hold=clr}
-️   
+    LabelPads {⚠️ Hold Clear All pad to clear all patterns ⚠️}
+    LabelPad BTN_CLEAR_ALL, {️⚠️hold=clr}
+
+️  elseif pad = BTN_CLEAR_ARMED
+    LabelPads {⚠️ Hold Clear Armed pad to clear current pattern ⚠️}
+    LabelPad BTN_CLEAR_ALL, {️⚠️hold=clr}
+
   elseif pad = BTN_RECORD
     record = not record
     Call @UpdateGUI
@@ -505,8 +517,10 @@
       endif
       Call @UpdateGUI
 
-  elseif pad = BTN_CLEAR_ARMED
-    Call @ClearActivePattern
+
+
+  elseif pad = BTN_HELP
+    Call @SetUIMode_Help
 
   elseif pad >= 8 and pad <= 14     // Pattern ARM. Future proof with upper bound ;)
     if mode_multi_pattern
@@ -782,14 +796,28 @@
 //   ╚═════╝  ╚═════╝ ╚═╝
 
 @SetUIMode_Pads
-  uiMode = UIMODE_PADS
   ShowLayout 2
+  uiMode = UIMODE_PADS
   Call @UpdateGUI
   LabelKnobs {P}, active_pattern+1, { settings }
 @End
 
 @SetUIMode_Voices
+  ShowLayout 3
   uiMode = UIMODE_VOICES
+  Call @UpdateGUI
+@End
+
+@SetUIMode_Help
+  ShowLayout 4
+  uiMode = UIMODE_HELP
+  Call @UpdateGUI
+@End
+
+@SetUIMode_Buttons
+  ShowLayout 2
+  uiMode = UIMODE_BUTTONS
+  mode_copy_pattern = NO
   Call @UpdateGUI
 @End
 
@@ -806,11 +834,17 @@
  
   elseif uiMode = UIMODE_VOICES
      call @GUI_VoicesMode
+  
+  elseif uiMode = UIMODE_HELP
+    call @GUI_HelpMode
   endif
 @End
 
+@GUI_HelpMode
+  // Void for now
+@End
+
 @GUI_VoicesMode
-  ShowLayout 3
   _edit_note_part = (active_pattern * sizeof_pattern) + (pad_edit_step * step_reso) + pad_edit_part
 
   _n = voice1[_edit_note_part]
@@ -843,7 +877,7 @@
 
   LabelKnob 7, {Probability}
   SetKnobValue 7, (TranslateScale note_probability[_edit_note_part], 0, 100, 0, 127)
-  LabelKnobs {⚠️ Voices for }, pad_edit_step, {:} , pad_edit_part, {  ℹ️ SHIFT to go back }
+  LabelKnobs {⚠️ Voices for }, pad_edit_step, {:} , pad_edit_part, {  ⬆️ SHIFT to go back }
 @End
 
 @GUI_PadMode
@@ -904,7 +938,7 @@
     LabelPad pad_edit_part_pad, {🔴}
   endif
   LabelPad pad_edit_step, {✅ Done}
-  LabelPads {⚠️ Editing }, pad_edit_step, {:} , pad_edit_part, {  ℹ️ SHIFT for voices }
+  LabelPads {⚠️ Editing }, pad_edit_step, {:} , pad_edit_part, {  ⬆️ SHIFT for voices }
 
   Call @GUI_LabelKnobs
 @End
@@ -931,6 +965,7 @@
 
   LabelPad BTN_COPY_PATTERN, {Copy pattern}
   LabelPad BTN_CLEAR_ARMED, {Clear armed}
+  LabelPad BTN_HELP, {ℹ️Help}
 
   if quantize = QUANT_NONE
     LabelPad BTN_QUANTIZE, {Quant: None} 
@@ -962,9 +997,9 @@
 
   LatchPad 8+active_pattern, 1
   if mode_multi_pattern
-    LabelPads {Tap patterns to arm and toggle ON/OFF. Long-press for arm only. ℹ️ SHIFT exits.}
+    LabelPads {Tap patterns to arm and toggle ON/OFF. Long-press for arm only. ⬆️ SHIFT exits.}
   else
-    LabelPads {Tap pattern to solo & arm. ℹ️ SHIFT exits.}
+    LabelPads {Tap pattern to solo & arm. ⬆️ SHIFT exits.}
   endif
 @End
 
@@ -1127,7 +1162,7 @@
 // <<<<<<<<< end of Pad Manager script code >>>>>
 
 @Description
-  FLOW 7 - 7-pattern, multi-channel, 16x8 step midi looper & sequencer for Mozaic by peblin.
+  FLOW - 7-pattern, multi-channel, 16x8 step midi looper & sequencer for Mozaic by peblin.
   Featuring:
 
   - 16 steps with 8 subdivisions (parts) each
@@ -1144,14 +1179,14 @@
 
 -- Basics --
 
-F7's sequencer consists of 16 steps per pattern. Each step is divided into 8 parts - so each part is 1/8 of step length. For example, setting step length using the Step knob to 1 bar, makes each part of the step a 1/8th note.
+FLOW's sequencer consists of 16 steps per pattern. Each step is divided into 8 parts - so each part is 1/8 of step length. For example, setting step length using the Step knob to 1 bar, makes each part of the step a 1/8th note.
 
 To get started, just start the host and start playing - the sequencer records whatever you play into the appropriate part and plays is back just as you played it. Double-tap to erase steps & parts, and single-tap on a step to edit its parts.
 
 The sequencer has 4 views;
 - Steps; each pad is a step. When a step has parts with notes, the pad will show the number of voices allocated per part in the step. T
 - Step edit; shows one row of steps and the other row the parts of the step being edited. Accessed by tapping or holding a pad in Steps view.
-- Part edit; shows faders for all voices, note time and probability of a part. Accessed by tapping SHIFT when in step edit view.
+- Part edit; shows faders for all voices, note time and probability of a part. Accessed by tapping ⬆️SHIFT when in step edit view.
 - Control panel; top row of pads are sequencer controls, bottom row are ARM/ON/OFF toggles for the 7 patterns. Accessed by tapping SHIFT in the Steps view. Exit by tapping SHIFT again.
 
 -- Recording --
@@ -1231,7 +1266,7 @@ To copy a pattern, first make sure it's the armed pattern then press "Copy Patte
 -- Clearing patterns --
 
 "Clear armed" will clear the currently armed pattern, except for midi channel.
-"Clear all" will clear all patterns. To prevent accidental disaster, "Clear all" requires you to long-press on the button, while "Clear armed" is immediate.
+"Clear all" will clear all patterns. To prevent accidental disaster, both clear buttons requires you to long-press on the button.
 
 - THANKS -
 
