@@ -383,9 +383,10 @@
 @OnShiftUp
 @End 
 
-//  ╔═╗╔═╗╔╦╗╔═╗   ┬   ╔╦╗╔═╗╔═╗╔═╗
-//  ╠═╝╠═╣ ║║╚═╗  ┌┼─   ║ ╠═╣╠═╝╚═╗
-//  ╩  ╩ ╩═╩╝╚═╝  └┘    ╩ ╩ ╩╩  ╚═╝
+
+//  ╔═╗╔═╗╔╦╗       ╦ ╦╔═╗╦  ╔╦╗
+//  ╠═╝╠═╣ ║║  ───  ╠═╣║ ║║   ║║
+//  ╩  ╩ ╩═╩╝       ╩ ╩╚═╝╩═╝═╩╝
 
 @OnPadHold
   if uiMode = UIMODE_PADS
@@ -422,6 +423,26 @@
       LatchPad active_pattern + 8, 1
     endif
    endif
+  endif
+@End
+
+//  ╔═╗╔═╗╔╦╗       ╔═╗╦╔╗╔╔═╗╦  ╔═╗  ╔╦╗╔═╗╔═╗
+//  ╠═╝╠═╣ ║║  ───  ╚═╗║║║║║ ╦║  ║╣    ║ ╠═╣╠═╝
+//  ╩  ╩ ╩═╩╝       ╚═╝╩╝╚╝╚═╝╩═╝╚═╝   ╩ ╩ ╩╩  
+
+@OnPadSingleTap // param: pad
+  if uiMode = UIMODE_PADS and mode_pad_edit = 1
+    Call @OnPadSingleTap_InPadEdit
+
+  elseif uiMode = UIMODE_PADS  // pads
+    Call @EnterPadEditMode
+
+  elseif uiMode = UIMODE_BUTTONS and mode_copy_pattern = YES
+    Call @OnPadSingleTap_InCopyPattern
+
+  elseif uiMode = UIMODE_BUTTONS
+    Call @OnPadSingleTap_Buttons
+
   endif
 @End
 
@@ -554,26 +575,11 @@
    endif
 @End
 
-// ROUTER: Single Taps 
-@OnPadSingleTap // param: pad
-  if uiMode = UIMODE_PADS and mode_pad_edit = 1
-    Call @OnPadSingleTap_InPadEdit
 
-//  elseif uiMode = UIMODE_PADS and mode_pad_reset_step = 1 // something like this for a "performance mode"
-    // reset_step = pad
-    // resetStepOnNewStep = 1
 
-  elseif uiMode = UIMODE_PADS  // pads
-    Call @EnterPadEditMode
-
-  elseif uiMode = UIMODE_BUTTONS and mode_copy_pattern = YES
-    Call @OnPadSingleTap_InCopyPattern
-
-  elseif uiMode = UIMODE_BUTTONS
-    Call @OnPadSingleTap_Buttons
-
-  endif
-@End
+//  ╔═╗╔═╗╔╦╗       ╔╦╗╔═╗╦ ╦╔╗ ╦  ╔═╗  ╔╦╗╔═╗╔═╗
+//  ╠═╝╠═╣ ║║  ───   ║║║ ║║ ║╠╩╗║  ║╣    ║ ╠═╣╠═╝
+//  ╩  ╩ ╩═╩╝       ═╩╝╚═╝╚═╝╚═╝╩═╝╚═╝   ╩ ╩ ╩╩  
 
 @OnPadDoubleTap
   if uiMode = UIMODE_BUTTONS
@@ -735,8 +741,14 @@
   elseif _knob = 5
     voice6[_part] = _note
     LabelKnob 5, (NoteName _note, YES)
-  elseif _knob = 6  // notetime
-    _ntx = Round((GetKnobValue 6) / 127 * 800)
+  elseif _knob = 6  // notetime. knob is mapped linearly from 0-100% for the first 1/4 of the slider, then from 100-1600 for the "upper" 75%.
+    _ntx = (GetKnobValue 6)
+    if _ntx <= 32
+      _ntx = Round(_ntx * 3.125)
+    else
+      _ntx = Round(((_ntx-32) / 95) * 1500) + 100
+    endif
+    Log {New note time: }, _ntx
     noteTimeX[_part] = _ntx
     LabelKnob 6, _ntx
   elseif _knob = 7  // probability
@@ -882,7 +894,13 @@
   SetKnobValue 5, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   LabelKnob 6, {Note time}
-  SetKnobValue 6, (TranslateScale noteTimeX[_edit_note_part], 0, 800, 0, 127)
+  _ntx = noteTimeX[_edit_note_part]
+  if _ntx <= 100
+    _ntx = Round _ntx / 3.125
+  else
+    _ntx = Round ((((_ntx - 100) / 1500) * 95) + 32)
+  endif
+  SetKnobValue 6, _ntx
 
   LabelKnob 7, {Probability}
   SetKnobValue 7, (TranslateScale note_probability[_edit_note_part], 0, 100, 0, 127)
