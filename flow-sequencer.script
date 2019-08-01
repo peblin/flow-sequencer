@@ -159,7 +159,23 @@
   
   for _pattern = 0 to 6 
     if (mode_multi_pattern = 0 and active_pattern=_pattern) or (mode_multi_pattern = 1 and playing_patterns[_pattern] = YES)
+
       _note_part = (_pattern * sizeof_pattern) + note_part
+      _ch = pattern_midich[_pattern]
+      
+      _mc = midicount[_note_part]
+      if _mc > 0
+        SendMIDICC _ch, midi1_CC[_note_part], midi1_value[_note_part]
+      endif
+      if _mc > 1
+        SendMIDICC _ch, midi2_CC[_note_part], midi2_value[_note_part]
+      endif
+      if _mc > 2
+        SendMIDICC _ch, midi3_CC[_note_part], midi3_value[_note_part]
+      endif
+      if _mc > 3
+        SendMIDICC _ch, midi4_CC[_note_part], midi4_value[_note_part]
+      endif
 
       if voice1[_note_part] >= 0 and ((Random 1, 100) <= note_probability[_note_part])
         _transposeNote = 0
@@ -170,7 +186,6 @@
         _polycount = polycount[_note_part]
         _noteDelay = noteOnDelayTicks[_note_part] * timer_tick_resolution
         _noteTime = noteTime * (noteTimeX[_note_part] / 100) + _noteDelay
-        _ch = pattern_midich[_pattern]
 
         if _polycount > 5
           SendMIDINoteOn _ch, voice6[_note_part] + _transposeNote, voice6_velocity[_note_part], _noteDelay      
@@ -358,7 +373,92 @@
 @End
 
 @OnMidiCC
-  Log {CC: }, MIDIByte2, { - }, MidiByte3
+  _note_on_ticks = CurrentTimerTicks
+  _el_ticks = _note_on_ticks - last_pulse_ticks
+  _el_pct = (Round _el_ticks / (tickTime / timer_tick_resolution) * 100)
+
+  _cc = MIDIByte2
+  _val = MIDIByte3
+
+  if not ((record and HostRunning) or mode_pad_edit = 1) or (uiMode = UIMODE_BUTTONS) or transpose
+    SendMidiThruOnCh pattern_midich[active_pattern]
+    Exit
+  endif
+  
+  _supressMidiThru = NO
+ 
+  if mode_pad_edit = 1
+    pad_note_part = pad_edit_step * step_reso + pad_edit_part // The note location for the pad being edited. 
+    _step = pad_edit_step
+    _note_part = (active_pattern * sizeof_pattern) + pad_note_part
+ 
+    if not Unassigned pad_edit_part_pad  // Latch and label when editing parts of step
+      LabelPad pad_edit_part_pad, {CC: }, _cc, {:}, _val
+    endif
+    _supressMidiThru = YES
+  else
+    _step = step
+    if quantize = QUANT_STEP
+      if step_part > 5  // if we are within 25% of next step then quantize to that 
+        _step = (_step  + 1) % 16
+        _supressMidiThru = YES
+      endif
+      _note_part = (active_pattern * sizeof_pattern) + _step * step_reso
+    else
+      if quantize = QUANT_PART and _el_pct > 50
+        // if note is closer to next part, then quantize to that one
+        note_part = (note_part + (Round _el_pct/100)) % (16 * step_reso)
+        _supressMidiThru = YES
+      endif
+      _note_part = (active_pattern * sizeof_pattern) + note_part
+    endif
+  endif
+
+  if not _supressMidiThru
+    SendMidiThruOnCh pattern_midich[active_pattern]
+  endif
+
+  _midi_offset = -1
+  _new_midi_cc = NO
+
+  if midi1_CC[_note_part] = _cc
+    _midi_offset = 0
+  elseif midi2_CC[_note_part] = _cc
+    _midi_offset = 1
+  elseif midi3_CC[_note_part] = _cc
+    _midi_offset = 2
+  elseif midi4_CC[_note_part] = _cc
+    _midi_offset = 3
+  endif
+
+  if _midi_offset = -1
+    _midi_offset = midicount
+    _new_midi_cc = YES
+  endif
+
+  if _midi_offset = 0
+    midi1_CC[_note_part] = _cc
+    midi1_value[_note_part] = _val
+  elseif _midi_offset = 1
+    midi2_CC[_note_part] = _cc
+    midi2_value[_note_part] = _val
+  elseif _midi_offset = 2
+    midi3_CC[_note_part] = _cc
+    midi3_value[_note_part] = _val
+  elseif _midi_offset = 3
+    midi4_CC[_note_part] = _cc
+    midi4_value[_note_part] = _val
+  endif
+
+  if _new_midi_cc and (midicount[_note_part] < 4)
+    Inc midicount[_note_part]
+  endif
+  
+  if midicount = 4
+    Log {WARNING - theres now 4 different CCs recorded, overwriting of 4th slot will occur if more automation is recorded}
+  endif
+
+ // Log {Recorded midi, CC: }, _cc, {:}, _val, { -> offset: }, _midi_offset, { (new:}, _new_midi_cc, {)}
 @End
 
 
@@ -673,6 +773,15 @@
   FillArray voice5_velocity, 100
   FillArray voice6, -1
   FillArray voice6_velocity, 100
+  FillArray midicount, 0
+  FillArray midi1_CC, -1
+  FillArray midi1_value, -1
+  FillArray midi2_CC, -1
+  FillArray midi2_value, -1
+  FillArray midi3_CC, -1
+  FillArray midi3_value, -1
+  FillArray midi4_CC, -1
+  FillArray midi4_value, -1
   FillArray noteTimeX, 100
   FillArray noteOnTicks, 0
   FillArray noteOnDelayTicks, 0
@@ -699,6 +808,15 @@
   FillArray noteOnTicks[_pattern_start], 0, sizeof_pattern
   FillArray noteOnDelayTicks[_pattern_start], 0, sizeof_pattern
   FillArray note_probability[_pattern_start], 100 , sizeof_pattern
+  FillArray midicount[_pattern_start], 0, sizeof_pattern
+  FillArray midi1_CC[_pattern_start], -1, sizeof_pattern
+  FillArray midi1_value[_pattern_start], -1, sizeof_pattern
+  FillArray midi2_CC[_pattern_start], -1, sizeof_pattern
+  FillArray midi2_value[_pattern_start], -1, sizeof_pattern
+  FillArray midi3_CC[_pattern_start], -1, sizeof_pattern
+  FillArray midi3_value[_pattern_start], -1, sizeof_pattern
+  FillArray midi4_CC[_pattern_start], -1, sizeof_pattern
+  FillArray midi4_value[_pattern_start], -1, sizeof_pattern
 @End
 
 //  ╦╔═╔╗╔╔═╗╔╗ ╔═╗
