@@ -1,4 +1,5 @@
 @Onload
+  SetShortName {Flow} 
   ShowLayout 2
   CurrentTimerTicks = 0
   last_pulse_ticks = 0
@@ -162,19 +163,22 @@
 
       _note_part = (_pattern * sizeof_pattern) + note_part
       _ch = pattern_midich[_pattern]
-      
-      _mc = midicount[_note_part]
-      if _mc > 0
-        SendMIDICC _ch, midi1_CC[_note_part], midi1_value[_note_part]
+    
+      if midi1_CC[_note_part] >= 0
+        SendMIDICC _ch, midi1_CC[_note_part], midi1_value[_note_part], 1
+//        Log step, {:}, step_part, { CC },  midi1_CC[_note_part], {:}, midi1_value[_note_part]
       endif
-      if _mc > 1
-        SendMIDICC _ch, midi2_CC[_note_part], midi2_value[_note_part]
+      if midi2_CC[_note_part] >= 0
+        SendMIDICC _ch, midi2_CC[_note_part], midi2_value[_note_part], 2
+//        Log step, {:}, step_part, { CC },  midi2_CC[_note_part], {:}, midi2_value[_note_part]
       endif
-      if _mc > 2
-        SendMIDICC _ch, midi3_CC[_note_part], midi3_value[_note_part]
+      if midi3_CC[_note_part] >= 0
+        SendMIDICC _ch, midi3_CC[_note_part], midi3_value[_note_part], 3 
+//        Log step, {:}, step_part, { CC },  midi3_CC[_note_part], {:}, midi3_value[_note_part]
       endif
-      if _mc > 3
-        SendMIDICC _ch, midi4_CC[_note_part], midi4_value[_note_part]
+      if midi4_CC[_note_part] >= 0
+        SendMIDICC _ch, midi4_CC[_note_part], midi4_value[_note_part], 4
+//        Log step, {:}, step_part, { CC },  midi4_CC[_note_part], {:}, midi4_value[_note_part]
       endif
 
       if voice1[_note_part] >= 0 and ((Random 1, 100) <= note_probability[_note_part])
@@ -373,10 +377,6 @@
 @End
 
 @OnMidiCC
-  _note_on_ticks = CurrentTimerTicks
-  _el_ticks = _note_on_ticks - last_pulse_ticks
-  _el_pct = (Round _el_ticks / (tickTime / timer_tick_resolution) * 100)
-
   _cc = MIDIByte2
   _val = MIDIByte3
 
@@ -391,27 +391,12 @@
     pad_note_part = pad_edit_step * step_reso + pad_edit_part // The note location for the pad being edited. 
     _step = pad_edit_step
     _note_part = (active_pattern * sizeof_pattern) + pad_note_part
- 
-    if not Unassigned pad_edit_part_pad  // Latch and label when editing parts of step
+     if not Unassigned pad_edit_part_pad  // Latch and label when editing parts of step
       LabelPad pad_edit_part_pad, {CC: }, _cc, {:}, _val
     endif
     _supressMidiThru = YES
   else
     _step = step
-    if quantize = QUANT_STEP
-      if step_part > 5  // if we are within 25% of next step then quantize to that 
-        _step = (_step  + 1) % 16
-        _supressMidiThru = YES
-      endif
-      _note_part = (active_pattern * sizeof_pattern) + _step * step_reso
-    else
-      if quantize = QUANT_PART and _el_pct > 50
-        // if note is closer to next part, then quantize to that one
-        note_part = (note_part + (Round _el_pct/100)) % (16 * step_reso)
-        _supressMidiThru = YES
-      endif
-      _note_part = (active_pattern * sizeof_pattern) + note_part
-    endif
   endif
 
   if not _supressMidiThru
@@ -432,8 +417,11 @@
   endif
 
   if _midi_offset = -1
-    _midi_offset = midicount
-    _new_midi_cc = YES
+    _midi_offset = midicount[_note_part]
+    if (midicount[_note_part] < 4)
+      Inc midicount[_note_part]
+      _new_midi_cc = YES
+    endif
   endif
 
   if _midi_offset = 0
@@ -450,15 +438,13 @@
     midi4_value[_note_part] = _val
   endif
 
-  if _new_midi_cc and (midicount[_note_part] < 4)
-    Inc midicount[_note_part]
-  endif
   
+ Log {Recorded midi, CC: }, _cc, {:}, _val, { -> offset: }, _midi_offset, { (new:}, _new_midi_cc, {)},{ part:}, _note_part
+
   if midicount = 4
     Log {WARNING - theres now 4 different CCs recorded, overwriting of 4th slot will occur if more automation is recorded}
   endif
 
- // Log {Recorded midi, CC: }, _cc, {:}, _val, { -> offset: }, _midi_offset, { (new:}, _new_midi_cc, {)}
 @End
 
 
