@@ -22,12 +22,13 @@
   // Buttons
   BTN_MULTI_PATTERN = 0
   BTN_RECORD = 1
-  BTN_QUANTIZE = 2
-  BTN_TRANSPOSE = 3
-  BTN_COPY_PATTERN = 4
-  BTN_CLEAR_ALL = 5
-  BTN_CLEAR_ARMED = 6
-  BTN_HELP = 7
+  BTN_MIDI = 2
+  BTN_QUANTIZE = 3
+  BTN_TRANSPOSE = 4
+  BTN_COPY_PATTERN = 5
+  BTN_CLEAR_ALL = 6
+  BTN_CLEAR_ARMED = 7
+  BTN_HELP = 15
 
   // Knobs
   KNOB_STEP = 0
@@ -62,6 +63,7 @@
     transpose = NO
     transposeNote = 0
     mode_multi_pattern = NO
+    midi_rec_mode = 0
   endif
 
   _res = step_reso * part_reso
@@ -73,6 +75,14 @@
   QUANT_STEP = 2
   quantize = QUANT_NONE
 
+  // midi recording
+  if Unassigned midi_rec_mode
+    midi_rec_mode = 0
+  endif
+  MIDI_REC_OFF = 0
+  MIDI_REC_WRITE = 1
+  MIDI_REC_OVERDUB = 2
+  
   if Unassigned currentDivisor
     currentDivisor = 3
     count = 1
@@ -380,7 +390,7 @@
   _cc = MIDIByte2
   _val = MIDIByte3
 
-  if not ((record and HostRunning) or mode_pad_edit = 1) or (uiMode = UIMODE_BUTTONS) or transpose
+  if not ((record and HostRunning) or mode_pad_edit = 1) or (uiMode = UIMODE_BUTTONS)  or transpose or midi_rec_mode = MIDI_REC_OFF
     SendMidiThruOnCh pattern_midich[active_pattern]
     Exit
   endif
@@ -438,6 +448,7 @@
     midi4_value[_note_part] = _val
   endif
 
+  LabelPad step, _cc, {: }, _val
   
  Log {Recorded midi, CC: }, _cc, {:}, _val, { -> offset: }, _midi_offset, { (new:}, _new_midi_cc, {)},{ part:}, _note_part
 
@@ -495,6 +506,9 @@
     elseif pad = BTN_CLEAR_ARMED
       LabelPad BTN_CLEAR_ARMED, {✅Cleared}
       Call @ClearActivePattern
+    elseif pad = BTN_MIDI
+      LabelPad BTN_MIDI, {✅Cleared}
+      Call @ClearActivePatternMidi
     elseif pad >= 8 and pad <= 14
       if mode_multi_pattern
         _pattern = pad - 8
@@ -612,6 +626,10 @@
 
   elseif pad = BTN_RECORD
     record = not record
+    Call @UpdateGUI
+
+  elseif pad = BTN_MIDI
+    midi_rec_mode = (midi_rec_mode + 1) % 3
     Call @UpdateGUI
 
   elseif pad = BTN_QUANTIZE
@@ -794,6 +812,18 @@
   FillArray noteOnTicks[_pattern_start], 0, sizeof_pattern
   FillArray noteOnDelayTicks[_pattern_start], 0, sizeof_pattern
   FillArray note_probability[_pattern_start], 100 , sizeof_pattern
+  FillArray midicount[_pattern_start], 0, sizeof_pattern
+  FillArray midi1_CC[_pattern_start], -1, sizeof_pattern
+  FillArray midi1_value[_pattern_start], -1, sizeof_pattern
+  FillArray midi2_CC[_pattern_start], -1, sizeof_pattern
+  FillArray midi2_value[_pattern_start], -1, sizeof_pattern
+  FillArray midi3_CC[_pattern_start], -1, sizeof_pattern
+  FillArray midi3_value[_pattern_start], -1, sizeof_pattern
+  FillArray midi4_CC[_pattern_start], -1, sizeof_pattern
+  FillArray midi4_value[_pattern_start], -1, sizeof_pattern
+@End
+
+@ClearActivePatternMidi
   FillArray midicount[_pattern_start], 0, sizeof_pattern
   FillArray midi1_CC[_pattern_start], -1, sizeof_pattern
   FillArray midi1_value[_pattern_start], -1, sizeof_pattern
@@ -1093,6 +1123,8 @@
   else
     LabelPad BTN_RECORD, {Live rec ⚪}
   endif
+  
+  LabelPad BTN_MIDI, {Midi rec:}, midi_rec_mode
 
   LabelPad BTN_COPY_PATTERN, {Copy pattern}
   LabelPad BTN_CLEAR_ARMED, {Clear armed}
