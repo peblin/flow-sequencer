@@ -42,6 +42,7 @@
   seq_step = 0 // this is internal to IncrementSequencer, use step below as its updated in "sync" with note_part and step_part
   step = 0
   pad_edit_step = 0
+  loops = 0 // number of sequencer loops run since host start
   
   // tracks total ticks since start of transport. might wrap, but that wont kill anyone....i think
   total_tickCounter = 0  
@@ -82,6 +83,9 @@
   MIDI_REC_OFF = 0
   MIDI_REC_WRITE = 1
   MIDI_REC_OVERDUB = 2
+  
+  midi_write_last_step = -1
+  midi_write_last_loop = -1
   
   if Unassigned currentDivisor
     currentDivisor = 3
@@ -124,6 +128,7 @@
       Inc seq_step
       if seq_step > 15
         seq_step = 0
+        Inc loops
       endif
     endif
   endif
@@ -145,6 +150,7 @@
   tickCounter = 0
   total_tickCounter = 0
   CurrentTimerTicks = 0  // "Optimistically" reset timer tick count on host start to reduce prob that it wraps during recording
+  loops = 0
 @End 
 
 @InitSequencer
@@ -395,6 +401,8 @@
     Exit
   endif
   
+
+  
   _supressMidiThru = NO
  
   if mode_pad_edit = 1
@@ -411,6 +419,17 @@
 
   if not _supressMidiThru
     SendMidiThruOnCh pattern_midich[active_pattern]
+  endif
+
+  if midi_rec_mode = MIDI_REC_WRITE and midi_write_last_step <> _step
+    Log {Clearing step }, _step
+    _step_part = (active_pattern * sizeof_pattern) + _step * step_reso // The note location for the pad being edited.
+    FillArray midi1_CC[_step_part], -1, step_reso
+    FillArray midi2_CC[_step_part], -1, step_reso
+    FillArray midi3_CC[_step_part], -1, step_reso
+    FillArray midi4_CC[_step_part], -1, step_reso  
+    FillArray midicount[_step_part], 0, step_reso
+    midi_write_last_step = _step
   endif
 
   _midi_offset = -1
