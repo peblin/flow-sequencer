@@ -86,6 +86,7 @@
   
   midi_write_last_step = -1
   midi_write_last_loop = -1
+  midi_slots = 4
   
   if Unassigned currentDivisor
     currentDivisor = 3
@@ -180,21 +181,21 @@
       _note_part = (_pattern * sizeof_pattern) + note_part
       _ch = pattern_midich[_pattern]
     
-      if midi1_CC[_note_part] >= 0
-        SendMIDICC _ch, midi1_CC[_note_part], midi1_value[_note_part], 1
-//        Log step, {:}, step_part, { CC },  midi1_CC[_note_part], {:}, midi1_value[_note_part]
+      if midi1_value[_note_part] >= 0
+        SendMIDICC _ch, pattern_CC_slot_map[active_pattern * midi_slots], midi1_value[_note_part], 1
+        Log step, {:}, step_part, { CC },  pattern_CC_slot_map[active_pattern * midi_slots], {:}, midi1_value[_note_part]
       endif
-      if midi2_CC[_note_part] >= 0
-        SendMIDICC _ch, midi2_CC[_note_part], midi2_value[_note_part], 2
-//        Log step, {:}, step_part, { CC },  midi2_CC[_note_part], {:}, midi2_value[_note_part]
+      if midi2_value[_note_part] >= 0
+        SendMIDICC _ch, pattern_CC_slot_map[active_pattern * midi_slots + 1], midi2_value[_note_part], 2
+        Log step, {:}, step_part, { CC },  pattern_CC_slot_map[active_pattern * midi_slots +1], {:}, midi2_value[_note_part]
       endif
-      if midi3_CC[_note_part] >= 0
-        SendMIDICC _ch, midi3_CC[_note_part], midi3_value[_note_part], 3 
-//        Log step, {:}, step_part, { CC },  midi3_CC[_note_part], {:}, midi3_value[_note_part]
+      if midi3_value[_note_part] >= 0
+        SendMIDICC _ch, pattern_CC_slot_map[active_pattern * midi_slots + 2], midi3_value[_note_part], 3 
+        Log step, {:}, step_part, { CC },  pattern_CC_slot_map[active_pattern * midi_slots +2], {:}, midi3_value[_note_part]
       endif
-      if midi4_CC[_note_part] >= 0
-        SendMIDICC _ch, midi4_CC[_note_part], midi4_value[_note_part], 4
-//        Log step, {:}, step_part, { CC },  midi4_CC[_note_part], {:}, midi4_value[_note_part]
+      if midi4_value[_note_part] >= 0
+        SendMIDICC _ch, pattern_CC_slot_map[active_pattern * midi_slots + 3], midi4_value[_note_part], 4
+        Log step, {:}, step_part, { CC },  pattern_CC_slot_map[active_pattern * midi_slots +3], {:}, midi4_value[_note_part]
       endif
 
       if voice1[_note_part] >= 0 and ((Random 1, 100) <= note_probability[_note_part])
@@ -400,9 +401,7 @@
     SendMidiThruOnCh pattern_midich[active_pattern]
     Exit
   endif
-  
-
-  
+   
   _supressMidiThru = NO
  
   if mode_pad_edit = 1
@@ -421,58 +420,66 @@
     SendMidiThruOnCh pattern_midich[active_pattern]
   endif
 
-  if midi_rec_mode = MIDI_REC_WRITE and midi_write_last_step <> _step
-    Log {Clearing step }, _step
-    _step_part = (active_pattern * sizeof_pattern) + _step * step_reso // The note location for the pad being edited.
-    FillArray midi1_CC[_step_part], -1, step_reso
-    FillArray midi2_CC[_step_part], -1, step_reso
-    FillArray midi3_CC[_step_part], -1, step_reso
-    FillArray midi4_CC[_step_part], -1, step_reso  
-    FillArray midicount[_step_part], 0, step_reso
-    midi_write_last_step = _step
-  endif
-
   _midi_offset = -1
-  _new_midi_cc = NO
-
-  if midi1_CC[_note_part] = _cc
+  _slot_base = active_pattern * midi_slots
+  if pattern_CC_slot_map[_slot_base] = _cc
     _midi_offset = 0
-  elseif midi2_CC[_note_part] = _cc
+  elseif pattern_CC_slot_map[_slot_base + 1] = _cc
     _midi_offset = 1
-  elseif midi3_CC[_note_part] = _cc
+  elseif pattern_CC_slot_map[_slot_base + 2] = _cc
     _midi_offset = 2
-  elseif midi4_CC[_note_part] = _cc
+  elseif pattern_CC_slot_map[_slot_base + 3] = _cc
     _midi_offset = 3
   endif
 
   if _midi_offset = -1
-    _midi_offset = midicount[_note_part]
-    if (midicount[_note_part] < 4)
-      Inc midicount[_note_part]
-      _new_midi_cc = YES
+    if pattern_CC_slot_map[_slot_base] = -1
+      _midi_offset = 0
+    elseif pattern_CC_slot_map[_slot_base + 1] = -1
+      _midi_offset = 1
+    elseif pattern_CC_slot_map[_slot_base + 2] = -1
+      _midi_offset = 2
+    elseif pattern_CC_slot_map[_slot_base + 3] = -1
+      _midi_offset = 3
+    else
+      Log {OUT OF SLOTS! Not recording: }, _cc, {:}, _val
+      Exit
+    endif  
+    pattern_CC_slot_map[_slot_base + _midi_offset] = _cc
+  endif
+
+  // Naive and stupid for now, clears all CC automation per step
+  if midi_rec_mode = MIDI_REC_WRITE and midi_write_last_step <> _step
+    Log {Clearing step }, _step
+    _step_part = (active_pattern * sizeof_pattern) + _step * step_reso // The note location for the pad being edited.
+    if _midi_offset = 0
+      FillArray midi1_value[_step_part], -1, step_reso
+    elseif _midi_offset = 1
+      FillArray midi2_value[_step_part], -1, step_reso
+    elseif _midi_offset = 2
+      FillArray midi3_value[_step_part], -1, step_reso
+    elseif _midi_offset = 3
+      FillArray midi4_value[_step_part], -1, step_reso  
     endif
+    midi_write_last_step = _step
   endif
 
   if _midi_offset = 0
-    midi1_CC[_note_part] = _cc
     midi1_value[_note_part] = _val
   elseif _midi_offset = 1
-    midi2_CC[_note_part] = _cc
     midi2_value[_note_part] = _val
   elseif _midi_offset = 2
-    midi3_CC[_note_part] = _cc
     midi3_value[_note_part] = _val
   elseif _midi_offset = 3
-    midi4_CC[_note_part] = _cc
     midi4_value[_note_part] = _val
   endif
 
   LabelPad step, _cc, {: }, _val
   
- Log {Recorded midi, CC: }, _cc, {:}, _val, { -> offset: }, _midi_offset, { (new:}, _new_midi_cc, {)},{ part:}, _note_part
+  Log {Recorded midi, CC: }, _cc, {:}, _val, { -> offset: }, _midi_offset, {)},{ part:}, _note_part
 
   if midicount = 4
-    Log {WARNING - theres now 4 different CCs recorded, overwriting of 4th slot will occur if more automation is recorded}
+    Log {WARNING - theres now 4 different CCs recorded, BAD THINGS WILL HAPPEN if you record another CC value}
   endif
 
 @End
@@ -797,14 +804,11 @@
   FillArray voice6, -1
   FillArray voice6_velocity, 100
   FillArray midicount, 0
-  FillArray midi1_CC, -1
   FillArray midi1_value, -1
-  FillArray midi2_CC, -1
   FillArray midi2_value, -1
-  FillArray midi3_CC, -1
   FillArray midi3_value, -1
-  FillArray midi4_CC, -1
   FillArray midi4_value, -1
+  FillArray pattern_CC_slot_map, -1
   FillArray noteTimeX, 100
   FillArray noteOnTicks, 0
   FillArray noteOnDelayTicks, 0
