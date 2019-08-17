@@ -180,22 +180,27 @@
 
       _note_part = (_pattern * sizeof_pattern) + note_part
       _ch = pattern_midich[_pattern]
-    
-      if midi1_value[_note_part] >= 0
-        SendMIDICC _ch, pattern_CC_slot_map[active_pattern * midi_slots], midi1_value[_note_part], 1
-        Log step, {:}, step_part, { CC },  pattern_CC_slot_map[active_pattern * midi_slots], {:}, midi1_value[_note_part]
+      _slot_base = active_pattern * midi_slots
+
+      _cc = pattern_CC_slot_map[_slot_base]
+      if midi1_value[_note_part] >= 0 and _cc >= 0
+        SendMIDICC _ch, _cc, midi1_value[_note_part], 1
+        Log step, {:}, step_part, { CC },  _cc, {:}, midi1_value[_note_part]
       endif
-      if midi2_value[_note_part] >= 0
-        SendMIDICC _ch, pattern_CC_slot_map[active_pattern * midi_slots + 1], midi2_value[_note_part], 2
-        Log step, {:}, step_part, { CC },  pattern_CC_slot_map[active_pattern * midi_slots +1], {:}, midi2_value[_note_part]
+      _cc = pattern_CC_slot_map[_slot_base + 1]
+      if midi2_value[_note_part] >= 0 and _cc >= 0
+        SendMIDICC _ch, _cc, midi2_value[_note_part], 2
+        Log step, {:}, step_part, { CC },  _cc, {:}, midi2_value[_note_part]
       endif
-      if midi3_value[_note_part] >= 0
-        SendMIDICC _ch, pattern_CC_slot_map[active_pattern * midi_slots + 2], midi3_value[_note_part], 3 
-        Log step, {:}, step_part, { CC },  pattern_CC_slot_map[active_pattern * midi_slots +2], {:}, midi3_value[_note_part]
+      _cc = pattern_CC_slot_map[_slot_base + 2]
+      if midi3_value[_note_part] >= 0 and _cc >= 0
+        SendMIDICC _ch, _cc, midi3_value[_note_part], 3 
+        Log step, {:}, step_part, { CC },  _cc, {:}, midi3_value[_note_part]
       endif
-      if midi4_value[_note_part] >= 0
-        SendMIDICC _ch, pattern_CC_slot_map[active_pattern * midi_slots + 3], midi4_value[_note_part], 4
-        Log step, {:}, step_part, { CC },  pattern_CC_slot_map[active_pattern * midi_slots +3], {:}, midi4_value[_note_part]
+      _cc = pattern_CC_slot_map[_slot_base + 3]
+      if midi4_value[_note_part] >= 0 and _cc >= 0
+        SendMIDICC _ch, _cc, midi4_value[_note_part], 4
+        Log step, {:}, step_part, { CC },  _cc, {:}, midi4_value[_note_part]
       endif
 
       if voice1[_note_part] >= 0 and ((Random 1, 100) <= note_probability[_note_part])
@@ -448,9 +453,7 @@
     pattern_CC_slot_map[_slot_base + _midi_offset] = _cc
   endif
 
-  // Naive and stupid for now, clears all CC automation per step
   if midi_rec_mode = MIDI_REC_WRITE and midi_write_last_step <> _step
-    Log {Clearing step }, _step
     _step_part = (active_pattern * sizeof_pattern) + _step * step_reso // The note location for the pad being edited.
     if _midi_offset = 0
       FillArray midi1_value[_step_part], -1, step_reso
@@ -461,6 +464,7 @@
     elseif _midi_offset = 3
       FillArray midi4_value[_step_part], -1, step_reso  
     endif
+    Log {Clearing step }, _step, { at offset }, _midi_offset
     midi_write_last_step = _step
   endif
 
@@ -475,13 +479,7 @@
   endif
 
   LabelPad step, _cc, {: }, _val
-  
   Log {Recorded midi, CC: }, _cc, {:}, _val, { -> offset: }, _midi_offset, {)},{ part:}, _note_part
-
-  if midicount = 4
-    Log {WARNING - theres now 4 different CCs recorded, BAD THINGS WILL HAPPEN if you record another CC value}
-  endif
-
 @End
 
 
@@ -657,6 +655,14 @@
   elseif pad = BTN_MIDI
     midi_rec_mode = (midi_rec_mode + 1) % 3
     Call @UpdateGUI
+    if midi_rec_mode = MIDI_REC_OFF
+      LabelPads {CC ⚪ off ⚠️ Hold CC rec to clear CC automation for current pattern ⚠️}
+    elseif midi_rec_mode = MIDI_REC_WRITE
+      LabelPads {CC 🔴 WRITE  ⚠️ Hold CC rec to clear CC automation for current pattern ⚠️}
+    elseif midi_rec_mode = MIDI_REC_OVERDUB
+      LabelPads {CC 🅾️OVERDUB ⚠️ Hold CC rec to clear CC automation for current pattern ⚠️}
+    endif
+
 
   elseif pad = BTN_QUANTIZE
     quantize = (quantize + 1) % 3
@@ -676,8 +682,6 @@
         LabelPad BTN_MULTI_PATTERN, {Multi: OFF}
       endif
       Call @UpdateGUI
-
-
 
   elseif pad = BTN_HELP
     Call @SetUIMode_Help
@@ -844,9 +848,11 @@
   FillArray midi3_value[_pattern_start], -1, sizeof_pattern
   FillArray midi4_CC[_pattern_start], -1, sizeof_pattern
   FillArray midi4_value[_pattern_start], -1, sizeof_pattern
+  FillArray pattern_CC_slot_map[active_pattern * midi_slots], -1, midi_slots
 @End
 
 @ClearActivePatternMidi
+  _pattern_start = active_pattern * sizeof_pattern
   FillArray midicount[_pattern_start], 0, sizeof_pattern
   FillArray midi1_CC[_pattern_start], -1, sizeof_pattern
   FillArray midi1_value[_pattern_start], -1, sizeof_pattern
@@ -856,6 +862,7 @@
   FillArray midi3_value[_pattern_start], -1, sizeof_pattern
   FillArray midi4_CC[_pattern_start], -1, sizeof_pattern
   FillArray midi4_value[_pattern_start], -1, sizeof_pattern
+  FillArray pattern_CC_slot_map[active_pattern * midi_slots], -1, midi_slots
 @End
 
 //  ╦╔═╔╗╔╔═╗╔╗ ╔═╗
@@ -1147,7 +1154,13 @@
     LabelPad BTN_RECORD, {Live rec ⚪}
   endif
   
-  LabelPad BTN_MIDI, {Midi rec:}, midi_rec_mode
+  if midi_rec_mode = MIDI_REC_OFF
+    LabelPad BTN_MIDI, {CC rec ⚪}
+  elseif midi_rec_mode = MIDI_REC_WRITE
+    LabelPad BTN_MIDI, {CC rec 🔴}
+  elseif midi_rec_mode = MIDI_REC_OVERDUB
+    LabelPad BTN_MIDI, {CC rec 🅾️}
+  endif
 
   LabelPad BTN_COPY_PATTERN, {Copy pattern}
   LabelPad BTN_CLEAR_ARMED, {Clear armed}
