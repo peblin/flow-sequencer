@@ -1431,6 +1431,8 @@ The knob "note time" sets the default note duration both for live and step recor
 
 Note duration knob defaults to "As played", meaning that the sequencer will use your playing (converted to a percentage of step length) as duration.
 
+When in part edit mode, you can set part duration from 5% to 1600% of one step. At 1600%, the note will be held for the whole loop when it will trigger again.
+
 -- Part probabilities --
 
 The probability knob sets the default probability for step-sequenced parts. You can also change the part probability using either the probability knob when step recording, or the probability fader in part edit view.
