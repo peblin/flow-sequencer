@@ -68,7 +68,11 @@
   endif
 
   _res = step_reso * part_reso
+
+  // PPQN and number of steps between parts for CC automation interpolation.
+  // Array represents [1/32, 1/16, 1/8T, 1/8, 1/4, 1/2, 1 bar, 2 bars]
   PPQN = [8*_res, 4*_res, 3*_res, 2*_res, _res, _res/2, _res/4, _res/8]
+  CC_interpolation_steps = [0, 0, 0, 0, 2, 4, 8, 16]
 
   // quantization
   QUANT_NONE = 0
@@ -165,6 +169,19 @@
 //  ║║║║╣  ║ ╠╦╝║ ║  ┌┼─  ║║║║ ║║║
 //  ╩ ╩╚═╝ ╩ ╩╚═╚═╝  └┘   ╩ ╩╩═╩╝╩
 
+@Interpolate 
+  Log {Interpolating for next val }, Interpolate_nextval, {(},Interpolate_diff,{) at }, _note_part + i, {, }, i, { parts away -> },Interpolate_dist,{ ms away. }
+
+  _delay = Interpolate_dist / Interpolate_steps
+  _increment = Interpolate_diff / Interpolate_steps
+  
+  for j = 1 to (Interpolate_steps - 1)
+    _ival = Interpolate_val + _increment * j
+    SendMIDICC _ch, _cc, (Round _ival), (Round _delay * j)
+    Log {Scheduled }, _cc, {:}, (Round _ival), { at }, (Round _delay*j)
+  endfor             
+@End
+
 @OnMetroPulse   
   last_pulse_ticks = CurrentTimerTicks
   step = seq_step
@@ -188,28 +205,20 @@
         SendMIDICC _ch, _cc, _val, 1
         Log step, {:}, step_part, { CC },  _cc, {:}, _val
 
-        _nextval = -1
-        for i = 1 to step_reso
-          if midi1_value[_note_part + i] >= 0 and _nextval = -1
-            _nextval = midi1_value[_note_part + i]
-            _diff = midi1_value[_note_part+i] - midi1_value[_note_part]
-            _dist = i * tickTime
-            _perms = _diff / _dist
-          
-            Log {Found next val }, _nextval, {(},_diff,{) at }, _note_part + i, {, }, i, { parts away -> },_dist,{ ms away. },{ Change with },_perms,{ per ms}
+        Interpolate_steps = CC_interpolation_steps[currentDivisor]
+        if Interpolate_steps > 0
+          Interpolate_nextval = -1
+          for i = 1 to step_reso
+            if midi1_value[_note_part + i] >= 0 and Interpolate_nextval = -1
+              Interpolate_nextval = midi1_value[_note_part + i]
+              Interpolate_diff = midi1_value[_note_part+i] - midi1_value[_note_part]
+              Interpolate_dist = i * tickTime
+              Interpolate_val = _val
 
-             _interpolate_step_div = 8 // worst case scenario
-            _delay = _dist / _interpolate_step_div
-            _interpolate_step_val = _diff / _interpolate_step_div
-            
-            for i = 1 to 7
-              _ival = _val + _interpolate_step_val * i
-              SendMIDICC _ch, _cc, (Round _ival), (Round _delay * i)
-              Log {Scheduled }, _cc, {:}, (Round _ival), { at }, (Round _delay*i)
-            endfor             
-
-          endif
-        endfor
+              Call @Interpolate
+            endif
+          endfor
+        endif
       endif
       
       _cc = pattern_CC_slot_map[_slot_base + 1]
