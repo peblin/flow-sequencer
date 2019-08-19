@@ -184,9 +184,34 @@
 
       _cc = pattern_CC_slot_map[_slot_base]
       if midi1_value[_note_part] >= 0 and _cc >= 0
-        SendMIDICC _ch, _cc, midi1_value[_note_part], 1
-        Log step, {:}, step_part, { CC },  _cc, {:}, midi1_value[_note_part]
+        _val = midi1_value[_note_part]
+        SendMIDICC _ch, _cc, _val, 1
+        Log step, {:}, step_part, { CC },  _cc, {:}, _val
+
+        _nextval = -1
+        for i = 1 to step_reso
+          if midi1_value[_note_part + i] >= 0 and _nextval = -1
+            _nextval = midi1_value[_note_part + i]
+            _diff = midi1_value[_note_part+i] - midi1_value[_note_part]
+            _dist = i * tickTime
+            _perms = _diff / _dist
+          
+            Log {Found next val }, _nextval, {(},_diff,{) at }, _note_part + i, {, }, i, { parts away -> },_dist,{ ms away. },{ Change with },_perms,{ per ms}
+
+             _interpolate_step_div = 8 // worst case scenario
+            _delay = _dist / _interpolate_step_div
+            _interpolate_step_val = _diff / _interpolate_step_div
+            
+            for i = 1 to 7
+              _ival = _val + _interpolate_step_val * i
+              SendMIDICC _ch, _cc, (Round _ival), (Round _delay * i)
+              Log {Scheduled }, _cc, {:}, (Round _ival), { at }, (Round _delay*i)
+            endfor             
+
+          endif
+        endfor
       endif
+      
       _cc = pattern_CC_slot_map[_slot_base + 1]
       if midi2_value[_note_part] >= 0 and _cc >= 0
         SendMIDICC _ch, _cc, midi2_value[_note_part], 2
