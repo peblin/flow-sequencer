@@ -1369,6 +1369,7 @@
   - 7 patterns, with midi channel configurable per pattern
   - From 1/32 to 2 bar step length giving 1/2 to 16 bar patterns
   - Live & step recording
+  - Midi CC recording & automation
   - Live recording stores note duration and timing for (almost) exact playback
   - Individual step / part editing, including voices, probability and duration
   - Note probability & duration can be set per part
@@ -1451,6 +1452,20 @@ Only one pattern plays at a time and the playing pattern is also armed for recor
 Multiple patterns can play simultaneously, either on the same midi channel or using several depending on the midi channel setting for each pattern.
 
 Toggle patterns ON/OFF in the Control Panel. Single-tapping on a pattern will toggle it ON/OFF and make it the armed pattern. Long-pressing on a pattern (tap and hold for approx 200ms+) will arm it, but not toggle the ON/OFF state. This way you can switch between editing different playing patterns without interrupting playback.
+
+-- CC recording --
+
+Flow can record incoming Midi CC commands per pattern. Even "empty" patterns (ie patterns with no notes) can record CCs so it's possible to record "CC phrases" such as different filter sweeps and then trigger them by toggling the recorded patterns on and off.
+
+Tap the "CC rec" button in the Control Panel to toggle between OFF, 🔴 WRITE and 🅾️ OVERDUB.
+
+In WRITE mode, incoming CC values will result in the current step being cleared (only once per loop), then stored in the corresponding sequencer part. For smooth knob movements this means that incoming values will "overwrite" previously stored ones (for that CC command), if values are coming a rate of at least once every step.
+
+In OVERDUB mode, incoming CC values are stored "as is" per part in the sequencer. This can be used creatively to yield glitchy effects when filters jump around wildly - but will give wild results. 🔥
+
+Flow has 4 "CC slots" and can store values for up to 4 different CCs per pattern. Slots are allocated on a first come basis - so if the sequencer receives sustain, mod wheel, cutoff and resonance CCs the slots for the active pattern are full and additional CC commands will be passed thru but not stored.
+
+Playback of recorded CCs is (at least for now) quantized to the last recorded CC value of each part. This means that for patterns having up to 1/4th notes as step length CCs will be perceived as "smooth", but longer step lengths will give a stepped impression.
 
 -- Transpose mode --
 
