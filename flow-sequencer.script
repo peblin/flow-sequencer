@@ -197,7 +197,7 @@
 
       _note_part = (_pattern * sizeof_pattern) + note_part
       _ch = pattern_midich[_pattern]
-      _slot_base = active_pattern * midi_slots
+      _slot_base = _pattern * midi_slots
 
       _cc = pattern_CC_slot_map[_slot_base]
       if midi1_value[_note_part] >= 0 and _cc >= 0
@@ -309,8 +309,18 @@
           SendMIDINoteOff _ch, voice2[_note_part] + _transposeNote, 0, _noteTime
         endif
         if _polycount > 0
-          SendMIDINoteOn _ch, voice1[_note_part] + _transposeNote, voice1_velocity[_note_part], _noteDelay      
-          SendMIDINoteOff _ch, voice1[_note_part] + _transposeNote, 0, _noteTime
+          _rpts = 1
+//          if step = 4
+//            _rpts = 3 // number of trigs
+//          endif
+          _rpttime = _noteTime / _rpts
+          _rptdelay = _noteDelay
+          for _i = 1 to _rpts
+            Log _i, {:}, _rpttime, {,}, _rptdelay
+            SendMIDINoteOn _ch, voice1[_note_part] + _transposeNote, voice1_velocity[_note_part], _rptdelay      
+            SendMIDINoteOff _ch, voice1[_note_part] + _transposeNote, 0, _rpttime
+            _rptdelay = _rptdelay + _rpttime          
+          endfor
         endif
       endif
     endif
@@ -473,6 +483,7 @@
   endif
 @End
 
+// REFACTOR: Uses _note_part, which is not defined here. 
 @OnMidiCC
   _cc = MIDIByte2
   _val = MIDIByte3
@@ -488,12 +499,13 @@
     pad_note_part = pad_edit_step * step_reso + pad_edit_part // The note location for the pad being edited. 
     _step = pad_edit_step
     _note_part = (active_pattern * sizeof_pattern) + pad_note_part
-     if not Unassigned pad_edit_part_pad  // Latch and label when editing parts of step
+//     if not Unassigned pad_edit_part_pad  // Latch and label when editing parts of step
       LabelPad pad_edit_part_pad, {CC: }, _cc, {:}, _val
-    endif
+//    endif
     _supressMidiThru = YES
   else
     _step = step
+    LabelPad _step, _cc, {: }, _val
   endif
 
   if not _supressMidiThru
@@ -553,7 +565,7 @@
     midi4_value[_note_part] = _val
   endif
 
-  LabelPad step, _cc, {: }, _val
+
   Log {Recorded midi, CC: }, _cc, {:}, _val, { -> offset: }, _midi_offset, {)},{ part:}, _note_part
 @End
 
