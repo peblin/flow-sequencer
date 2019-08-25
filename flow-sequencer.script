@@ -169,36 +169,22 @@
 //  ║║║║╣  ║ ╠╦╝║ ║  ┌┼─  ║║║║ ║║║
 //  ╩ ╩╚═╝ ╩ ╩╚═╚═╝  └┘   ╩ ╩╩═╩╝╩
 
-@Interpolate 
+@OnMetroPulse_Interpolate 
   Log {Interpolating for next val }, Interpolate_nextval, {(},Interpolate_diff,{) at }, _note_part + i, {, }, i, { parts away -> },Interpolate_dist,{ ms away. }
 
   _delay = Interpolate_dist / Interpolate_steps
   _increment = Interpolate_diff / Interpolate_steps
   
   for j = 1 to (Interpolate_steps - 1)
-    _ival = Interpolate_val + _increment * j
+    _ival = _val + _increment * j
     SendMIDICC _ch, _cc, (Round _ival), (Round _delay * j)
     Log {Scheduled }, _cc, {:}, (Round _ival), { at }, (Round _delay*j)
   endfor             
 @End
 
-@OnMetroPulse   
-  last_pulse_ticks = CurrentTimerTicks
-  step = seq_step
-  step_part = Round(((tickCounter+1) / countPerStep) * step_reso) - 1
-  if step_part >= step_reso
-    step_part = 0
-    step = (step + 1) % 16
-  endif
-  note_part = (step * step_reso + step_part) // The note location in the wide grid
-  
-  for _pattern = 0 to 6 
-    if (mode_multi_pattern = 0 and active_pattern=_pattern) or (mode_multi_pattern = 1 and playing_patterns[_pattern] = YES)
-
-      _note_part = (_pattern * sizeof_pattern) + note_part
-      _ch = pattern_midich[_pattern]
+@OnMetroPulse_CC_automation
+      // CC AUTOMATION
       _slot_base = _pattern * midi_slots
-
       _cc = pattern_CC_slot_map[_slot_base]
       if midi1_value[_note_part] >= 0 and _cc >= 0
         _val = midi1_value[_note_part]
@@ -213,8 +199,7 @@
               Interpolate_nextval = midi1_value[_note_part + i]
               Interpolate_diff = midi1_value[_note_part+i] - midi1_value[_note_part]
               Interpolate_dist = i * tickTime
-              Interpolate_val = _val
-              Call @Interpolate
+              Call @OnMetroPulse_Interpolate
             endif
           endfor
         endif
@@ -233,12 +218,12 @@
               Interpolate_nextval = midi2_value[_note_part + i]
               Interpolate_diff = midi2_value[_note_part+i] - midi2_value[_note_part]
               Interpolate_dist = i * tickTime
-              Interpolate_val = _val
-              Call @Interpolate
+              Call @OnMetroPulse_Interpolate
             endif
           endfor
         endif
       endif
+      
       _cc = pattern_CC_slot_map[_slot_base + 2]
       if midi3_value[_note_part] >= 0 and _cc >= 0
         _val = midi3_value[_note_part]
@@ -252,12 +237,12 @@
               Interpolate_nextval = midi3_value[_note_part + i]
               Interpolate_diff = midi3_value[_note_part+i] - midi3_value[_note_part]
               Interpolate_dist = i * tickTime
-              Interpolate_val = _val
-              Call @Interpolate
+              Call @OnMetroPulse_Interpolate
             endif
           endfor
         endif
       endif
+      
       _cc = pattern_CC_slot_map[_slot_base + 3]
       if midi4_value[_note_part] >= 0 and _cc >= 0
         _val = midi4_value[_note_part]      
@@ -271,14 +256,14 @@
               Interpolate_nextval = midi4_value[_note_part + i]
               Interpolate_diff = midi4_value[_note_part+i] - midi4_value[_note_part]
               Interpolate_dist = i * tickTime
-              Interpolate_val = _val
-              Call @Interpolate
+              Call @OnMetroPulse_Interpolate
             endif
           endfor
         endif
       endif
+@End
 
-      if voice1[_note_part] >= 0 and ((Random 1, 100) <= note_probability[_note_part])
+@OnMetroPulse_notes
         _transposeNote = 0
         if transpose 
           _transposeNote = transposeNote
@@ -309,10 +294,7 @@
           SendMIDINoteOff _ch, voice2[_note_part] + _transposeNote, 0, _noteTime
         endif
         if _polycount > 0
-          _rpts = 1
-//          if step = 4
-//            _rpts = 3 // number of trigs
-//          endif
+          _rpts = note_repeat[_note_part]
           _rpttime = _noteTime / _rpts
           _rptdelay = _noteDelay
           for _i = 1 to _rpts
@@ -322,6 +304,29 @@
             _rptdelay = _rptdelay + _rpttime          
           endfor
         endif
+@End
+
+@OnMetroPulse   
+  last_pulse_ticks = CurrentTimerTicks
+  step = seq_step
+  step_part = Round(((tickCounter+1) / countPerStep) * step_reso) - 1
+  if step_part >= step_reso
+    step_part = 0
+    step = (step + 1) % 16
+  endif
+  note_part = (step * step_reso + step_part) // The note location in the wide grid
+
+  for _pattern = 0 to 6 
+    if (mode_multi_pattern = 0 and active_pattern=_pattern) or (mode_multi_pattern = 1 and playing_patterns[_pattern] = YES)
+      _note_part = (_pattern * sizeof_pattern) + note_part
+      _ch = pattern_midich[_pattern]
+
+      call @OnMetroPulse_CC_automation
+
+      if voice1[_note_part] >= 0 and ((Random 1, 100) <= note_probability[_note_part])
+        call @OnMetroPulse_notes
+      
+
       endif
     endif
   endfor
@@ -499,9 +504,8 @@
     pad_note_part = pad_edit_step * step_reso + pad_edit_part // The note location for the pad being edited. 
     _step = pad_edit_step
     _note_part = (active_pattern * sizeof_pattern) + pad_note_part
-//     if not Unassigned pad_edit_part_pad  // Latch and label when editing parts of step
-      LabelPad pad_edit_part_pad, {CC: }, _cc, {:}, _val
-//    endif
+step
+    LabelPad pad_edit_part_pad, {CC: }, _cc, {:}, _val
     _supressMidiThru = YES
   else
     _step = step
@@ -829,7 +833,7 @@
     del_step = pad
     del_note_part = del_step * step_reso // The note location in the wide grid
 
-    for po = 0 to step_reso
+    for po = 0 to step_reso - 1
       _del_note_part = (active_pattern * sizeof_pattern) + (del_note_part + po) 
       polycount[_del_note_part] = 0
       voice1[_del_note_part] = -1
@@ -840,6 +844,7 @@
       voice6[_del_note_part] = -1
       velocity[_del_note_part] = 100
       noteTimeX[_del_note_part] = 100
+      note_repeat[_del_note_part] = 1
     endfor
   
     LatchPad del_step, 0
@@ -905,6 +910,7 @@
   FillArray noteOnDelayTicks, 0
   FillArray note_probability, 100
   playing_patterns = [ YES, NO, NO, NO, NO, NO, NO ]
+  FillArray note_repeat, 1
 @End
 
 @ClearActivePattern
@@ -936,6 +942,7 @@
   FillArray midi4_CC[_pattern_start], -1, sizeof_pattern
   FillArray midi4_value[_pattern_start], -1, sizeof_pattern
   FillArray pattern_CC_slot_map[active_pattern * midi_slots], -1, midi_slots
+  FillArray note_repeat, 1
 @End
 
 @ClearActivePatternMidi
@@ -1006,6 +1013,10 @@
     _p = Round((GetKnobValue 7) / 127 * 100)
     note_probability[_part] = _p
     LabelKnob 7, _p
+  elseif _knob = 8 // note_ratchet
+    _rpts = (Round (TranslateScale (GetKnobValue 8), 1, 127, 1, 6))
+    note_repeat[_part] = _rpts
+    LabelKnob 8, _rpts 
   endif
 @End
 
@@ -1155,6 +1166,10 @@
 
   LabelKnob 7, {Probability}
   SetKnobValue 7, (TranslateScale note_probability[_edit_note_part], 0, 100, 0, 127)
+
+  LabelKnob 8, {Ratchet}
+  SetKnobValue 8, (TranslateScale note_repeat[_edit_note_part], 1, 6, 0, 127)
+
   LabelKnobs {⚠️ Voices for }, pad_edit_step, {:} , pad_edit_part, {  ⬆️ SHIFT to go back }
 @End
 
@@ -1423,8 +1438,14 @@
   endif
 @End 
 
-@OnTimer 
+@OnTimer
+
   CurrentTimerTicks = (CurrentTimerTicks + 1) % 65534  // Wraps around every ~10 minutes
+  
+  if padsActiveCnt = 0
+    Exit
+  endif
+
   for pad = 0 to padMaxId
     if padActive[pad]
       Inc padTicks[pad]
