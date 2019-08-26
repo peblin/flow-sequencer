@@ -1250,7 +1250,7 @@ step
     _vxknob = 60 - (TranslateScale _vx, 0, 1, 0, 60)
   elseif _vx < 1
     _vxknob = 127 - (TranslateScale _vx, 1, 10, 0, 60)
-
+  endif
   LabelKnobs {⚠️ Voices for }, pad_edit_step, {:} , pad_edit_part, {  ⬆️ SHIFT to go back }
 @End
 
