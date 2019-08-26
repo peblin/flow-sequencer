@@ -32,8 +32,9 @@
 
   // Knobs
   KNOB_STEP = 0
-  KNOB_NOTETIME = 1
+  KNOB_GATE = 1
   KNOB_PROBABILITY = 2
+  KNOB_VELOCURVE = 2
   KNOB_MIDICH = 3
   
   poly_offset = 0
@@ -96,12 +97,12 @@
     currentDivisor = 3
     count = 1
     tickCounter = 0
-    noteTimeX_knob = -1
+    gateX_knob = -1
     probability_knob = 100
   endif
 
   SetKnobValue KNOB_STEP, 48          // 1/8
-  SetKnobValue KNOB_NOTETIME, 0       // As played
+  SetKnobValue KNOB_GATE, 0       // As played
   SetKnobValue KNOB_PROBABILITY, 127  // 100%
   SetKnobValue KNOB_MIDICH, 1         // Default Midi Channel 1
 
@@ -142,7 +143,7 @@
 @ComputeTimes
   tickTime = QuarterNote / PPQN[currentDivisor] * part_reso 
   stepTime = tickTime * step_reso
-  noteTime = stepTime
+  gate = stepTime
   countPerStep = step_reso * part_reso 
   SetMetroPPQN PPQN[currentDivisor]
 @End
@@ -271,35 +272,44 @@
 
         _polycount = polycount[_note_part]
         _noteDelay = noteOnDelayTicks[_note_part] * timer_tick_resolution
-        _noteTime = noteTime * (noteTimeX[_note_part] / 100) + _noteDelay
+        _gate = gate * (gateX[_note_part] / 100) + _noteDelay
+        _vcurve = note_velocityX[_note_part]
+log {vcurve: }, _vcurve
 
         if _polycount > 5
-          SendMIDINoteOn _ch, voice6[_note_part] + _transposeNote, voice6_velocity[_note_part], _noteDelay      
-          SendMIDINoteOff _ch, voice6[_note_part] + _transposeNote, 0, _noteTime
+          _v = TranslateCurve voice6_velocity[_note_part], _vcurve, 0, 127 
+          SendMIDINoteOn _ch, voice6[_note_part] + _transposeNote, _v, _noteDelay      
+          SendMIDINoteOff _ch, voice6[_note_part] + _transposeNote, 0, _gate
         endif
         if _polycount > 4
-          SendMIDINoteOn _ch, voice5[_note_part] + _transposeNote, voice5_velocity[_note_part], _noteDelay     
-          SendMIDINoteOff _ch, voice5[_note_part] + _transposeNote, 0, _noteTime
+          _v = TranslateCurve voice5_velocity[_note_part], _vcurve, 0, 127 
+          SendMIDINoteOn _ch, voice5[_note_part] + _transposeNote, _v, _noteDelay     
+          SendMIDINoteOff _ch, voice5[_note_part] + _transposeNote, 0, _gate
         endif
         if _polycount > 3
-          SendMIDINoteOn _ch, voice4[_note_part] + _transposeNote, voice4_velocity[_note_part], _noteDelay      
-          SendMIDINoteOff _ch, voice4[_note_part] + _transposeNote, 0, _noteTime
+          _v = TranslateCurve voice4_velocity[_note_part], _vcurve, 0, 127 
+          SendMIDINoteOn _ch, voice4[_note_part] + _transposeNote, _v, _noteDelay      
+          SendMIDINoteOff _ch, voice4[_note_part] + _transposeNote, 0, _gate
         endif
         if _polycount > 2
-          SendMIDINoteOn _ch, voice3[_note_part] + _transposeNote, voice3_velocity[_note_part], _noteDelay      
-          SendMIDINoteOff _ch, voice3[_note_part] + _transposeNote, 0, _noteTime
+          _v = TranslateCurve voice3_velocity[_note_part], _vcurve, 0, 127 
+          SendMIDINoteOn _ch, voice3[_note_part] + _transposeNote, _v, _noteDelay      
+          SendMIDINoteOff _ch, voice3[_note_part] + _transposeNote, 0, _gate
         endif
         if _polycount > 1
-          SendMIDINoteOn _ch, voice2[_note_part] + _transposeNote, voice2_velocity[_note_part], _noteDelay      
-          SendMIDINoteOff _ch, voice2[_note_part] + _transposeNote, 0, _noteTime
+          _v = TranslateCurve voice2_velocity[_note_part], _vcurve, 0, 127 
+          SendMIDINoteOn _ch, voice2[_note_part] + _transposeNote, _v, _noteDelay      
+          SendMIDINoteOff _ch, voice2[_note_part] + _transposeNote, 0, _gate
         endif
         if _polycount > 0
+            _v = TranslateCurve voice1_velocity[_note_part], _vcurve, 0, 127 
+log {voice1_vel:},voice1_velocity[_note_part],{   translated1_vel: }, _v
           _rpts = note_repeat[_note_part]
-          _rpttime = _noteTime / _rpts
+          _rpttime = _gate / _rpts
           _rptdelay = _noteDelay
           for _i = 1 to _rpts
             Log _i, {:}, _rpttime, {,}, _rptdelay
-            SendMIDINoteOn _ch, voice1[_note_part] + _transposeNote, voice1_velocity[_note_part], _rptdelay      
+            SendMIDINoteOn _ch, voice1[_note_part] + _transposeNote, _v, _rptdelay      
             SendMIDINoteOff _ch, voice1[_note_part] + _transposeNote, 0, _rpttime
             _rptdelay = _rptdelay + _rpttime          
           endfor
@@ -325,8 +335,6 @@
 
       if voice1[_note_part] >= 0 and ((Random 1, 100) <= note_probability[_note_part])
         call @OnMetroPulse_notes
-      
-
       endif
     endif
   endfor
@@ -439,7 +447,7 @@
 
 @OnMidiNoteOff
 
-// TODO: Should to send explicit midi command with velocity set to noteTimeX_knob (or "As Played") to make "midi thru" consistent with sequencer settings
+// TODO: Should to send explicit midi command with velocity set to gateX_knob (or "As Played") to make "midi thru" consistent with sequencer settings
   SendMidiThruOnCh pattern_midich[active_pattern]
 
   if not ((record and HostRunning) or mode_pad_edit = 1) or transpose or (uiMode = UIMODE_BUTTONS)
@@ -472,19 +480,19 @@
   if _elapsed_ticks <= 0
     _elapsed_pct = 100
   else
-    _elapsed_pct = _elapsed_ticks * timer_tick_resolution / noteTime * 100
+    _elapsed_pct = _elapsed_ticks * timer_tick_resolution / gate * 100
   endif
 
-  if noteTimeX_knob < 0
-    noteTimeX[_note_part] = _elapsed_pct  // elapsed as percentage of notetime
+  if gateX_knob < 0
+    gateX[_note_part] = _elapsed_pct  // elapsed as percentage of gate
   else
-    noteTimeX[_note_part] = noteTimeX_knob  // Set fixed note time from knob
+    gateX[_note_part] = gateX_knob  // Set fixed gate from knob
   endif
 
   if not mode_pad_edit 
-    LabelPad _note_step, (NoteName nn, YES), {:}, Round(noteTimeX[_note_part]) 
+    LabelPad _note_step, (NoteName nn, YES), {:}, Round(gateX[_note_part]) 
   else
-    LabelPad _note_pad, {🔴}, (NoteName nn, YES), {:}, Round(noteTimeX[_note_part]) 
+    LabelPad _note_pad, {🔴}, (NoteName nn, YES), {:}, Round(gateX[_note_part]) 
   endif
 @End
 
@@ -668,7 +676,7 @@ step
   else  
     _note_part = (active_pattern * sizeof_pattern) + pad_edit_step * step_reso + (pad_edit_part_pad % step_reso)
     if voice1[_note_part] > -1
-      LabelPad pad_edit_part_pad, {🔵}, (NoteName voice1[_note_part], YES), {:}, (Round noteTimeX[_note_part])
+      LabelPad pad_edit_part_pad, {🔵}, (NoteName voice1[_note_part], YES), {:}, (Round gateX[_note_part])
     else
       LabelPad pad_edit_part_pad, {⚪️}
     endif
@@ -682,7 +690,7 @@ step
     pad_edit_note_part = _note_part // used for Voices mode
 
     if voice1[_note_part] > -1
-      LabelPad pad_edit_part_pad, {🔴}, (NoteName voice1[_note_part], YES), {:}, noteTimeX[_note_part]
+      LabelPad pad_edit_part_pad, {🔴}, (NoteName voice1[_note_part], YES), {:}, gateX[_note_part]
     else
       LabelPad pad_edit_part_pad, {🔴}
     endif
@@ -825,7 +833,7 @@ step
     voice5[_del_note_part] = -1
     voice6[_del_note_part] = -1
     velocity[_del_note_part] = 100
-    noteTimeX[_del_note_part] = 100
+    gateX[_del_note_part] = 100
 
     LatchPad pad, 0
     LabelPad pad, { }
@@ -843,7 +851,7 @@ step
       voice5[_del_note_part] = -1
       voice6[_del_note_part] = -1
       velocity[_del_note_part] = 100
-      noteTimeX[_del_note_part] = 100
+      gateX[_del_note_part] = 100
       note_repeat[_del_note_part] = 1
     endfor
   
@@ -875,7 +883,8 @@ step
   CopyArray voice5_velocity[_src_pattern_pos], voice5_velocity[_dest_pattern_pos], sizeof_pattern
   CopyArray voice6_velocity[_src_pattern_pos], voice6_velocity[_dest_pattern_pos], sizeof_pattern
   CopyArray polycount[_src_pattern_pos], polycount[_dest_pattern_pos], sizeof_pattern
-  CopyArray noteTimeX[_src_pattern_pos], noteTimeX[_dest_pattern_pos], sizeof_pattern
+  CopyArray gateX[_src_pattern_pos], gateX[_dest_pattern_pos], sizeof_pattern
+  CopyArray note_velocityX[_src_pattern_pos], gateX[_dest_pattern_pos], sizeof_pattern
   CopyArray noteOnTicks[_src_pattern_pos], noteOnTicks[_dest_pattern_pos], sizeof_pattern
   CopyArray noteOnDelayTicks[_src_pattern_pos], noteOnDelayTicks[_dest_pattern_pos], sizeof_pattern
   CopyArray note_probability[_src_pattern_pos], note_probability[_dest_pattern_pos], sizeof_pattern
@@ -888,27 +897,28 @@ step
 @ClearSequencer
   FillArray polycount, 0
   FillArray voice1, -1
-  FillArray voice1_velocity, 100
+  FillArray voice1_velocity, 0
   FillArray voice2, -1
-  FillArray voice2_velocity, 100
+  FillArray voice2_velocity, 0
   FillArray voice3, -1
-  FillArray voice3_velocity, 100
+  FillArray voice3_velocity, 0
   FillArray voice4, -1
-  FillArray voice4_velocity, 100
+  FillArray voice4_velocity, 0
   FillArray voice5, -1
-  FillArray voice5_velocity, 100
+  FillArray voice5_velocity, 0
   FillArray voice6, -1
-  FillArray voice6_velocity, 100
+  FillArray voice6_velocity, 0
   FillArray midicount, 0
   FillArray midi1_value, -1
   FillArray midi2_value, -1
   FillArray midi3_value, -1
   FillArray midi4_value, -1
   FillArray pattern_CC_slot_map, -1
-  FillArray noteTimeX, 100
+  FillArray gateX, 100
   FillArray noteOnTicks, 0
   FillArray noteOnDelayTicks, 0
   FillArray note_probability, 100
+  FillArray note_velocityX, 1.0
   playing_patterns = [ YES, NO, NO, NO, NO, NO, NO ]
   FillArray note_repeat, 1
 @End
@@ -917,18 +927,19 @@ step
   _pattern_start = active_pattern * sizeof_pattern
   FillArray polycount[_pattern_start], 0, sizeof_pattern
   FillArray voice1[_pattern_start], -1, sizeof_pattern
-  FillArray voice1_velocity[_pattern_start], 100, sizeof_pattern 
+  FillArray voice1_velocity[_pattern_start], 0, sizeof_pattern 
   FillArray voice2[_pattern_start], -1, sizeof_pattern 
-  FillArray voice2_velocity[_pattern_start], 100, sizeof_pattern 
+  FillArray voice2_velocity[_pattern_start], 0, sizeof_pattern 
   FillArray voice3[_pattern_start], -1, sizeof_pattern 
-  FillArray voice3_velocity[_pattern_start], 100, sizeof_pattern 
+  FillArray voice3_velocity[_pattern_start], 0, sizeof_pattern 
   FillArray voice4[_pattern_start], -1, sizeof_pattern 
-  FillArray voice4_velocity[_pattern_start], 100, sizeof_pattern 
+  FillArray voice4_velocity[_pattern_start], 0, sizeof_pattern 
   FillArray voice5[_pattern_start], -1, sizeof_pattern 
-  FillArray voice5_velocity[_pattern_start], 100, sizeof_pattern 
+  FillArray voice5_velocity[_pattern_start], 0, sizeof_pattern 
   FillArray voice6[_pattern_start], -1, sizeof_pattern
-  FillArray voice6_velocity[_pattern_start], 100, sizeof_pattern
-  FillArray noteTimeX[_pattern_start], 100, sizeof_pattern
+  FillArray voice6_velocity[_pattern_start], 0, sizeof_pattern
+  FillArray gateX[_pattern_start], 100, sizeof_pattern
+  FillArray note_velocityX[_pattern_start], 1.0, sizeof_pattern
   FillArray noteOnTicks[_pattern_start], 0, sizeof_pattern
   FillArray noteOnDelayTicks[_pattern_start], 0, sizeof_pattern
   FillArray note_probability[_pattern_start], 100 , sizeof_pattern
@@ -999,15 +1010,15 @@ step
   elseif _knob = 5
     voice6[_part] = _note
     LabelKnob 5, (NoteName _note, YES)
-  elseif _knob = 6  // notetime. knob is mapped linearly from 0-100% for the first 1/4 of the slider, then from 100-1600 for the "upper" 75%.
+  elseif _knob = 6  // gate. knob is mapped linearly from 0-100% for the first 1/4 of the slider, then from 100-1600 for the "upper" 75%.
     _ntx = (GetKnobValue 6)
     if _ntx <= 32
       _ntx = Round(_ntx * 3.125)
     else
       _ntx = Round(((_ntx-32) / 95) * 1500) + 100
     endif
-    Log {New note time: }, _ntx
-    noteTimeX[_part] = _ntx
+    Log {New gate: }, _ntx
+    gateX[_part] = _ntx
     LabelKnob 6, _ntx
   elseif _knob = 7  // probability
     _p = Round((GetKnobValue 7) / 127 * 100)
@@ -1017,6 +1028,45 @@ step
     _rpts = (Round (TranslateScale (GetKnobValue 8), 1, 127, 1, 6))
     note_repeat[_part] = _rpts
     LabelKnob 8, _rpts 
+
+  elseif _knob = 9 // note_velocityX
+    _vxknob = GetKnobValue 9
+    if _vxknob < 60
+      _vx = 10 - (TranslateScale _vxknob, 0, 60, 0, 9)
+    elseif _vxknob > 68
+      _vx = 1.0 - (TranslateScale _vxknob, 69, 127, 0, 1)
+    else
+      _vx = 1.0
+    endif
+    note_velocityX[_part] = _vx
+    LabelKnob 9, _vx
+
+  _vcurve = _vx
+  _n = voice1[_part]
+  _n1 = _n
+  _v = TranslateCurve voice1_velocity[_part], _vcurve, 0, 127 
+  LabelKnob 0, (NoteName _n, YES), {:}, Round _v
+
+  _n = voice2[_part]
+  _v = TranslateCurve voice2_velocity[_part], _vcurve, 0, 127 
+  LabelKnob 1, (NoteName _n, YES), {:}, Round _v
+
+  _n = voice3[_part]
+  _v = TranslateCurve voice3_velocity[_part], _vcurve, 0, 127 
+  LabelKnob 2, (NoteName _n, YES), {:}, Round _v
+
+  _n = voice4[_part]
+  _v = TranslateCurve voice4_velocity[_part], _vcurve, 0, 127 
+  LabelKnob 3, (NoteName _n, YES), {:}, Round _v
+
+  _n = voice5[_part]
+  _v = TranslateCurve voice5_velocity[_part], _vcurve, 0, 127 
+  LabelKnob 4, (NoteName _n, YES), {:}, Round _v
+
+  _n = voice6[_part]
+  _v = TranslateCurve voice6_velocity[_part], _vcurve, 0, 127 
+  LabelKnob 5, (NoteName _n, YES), {:}, Round _v
+
   endif
 @End
 
@@ -1042,16 +1092,19 @@ step
     endif
     call @ComputeTimes
 
-  elseif LastKnob = KNOB_NOTETIME
-    noteTimeX_knob = Round((GetKnobValue 1) / 127 * 800)  
-    if noteTimeX_knob < 6.25
-      noteTimeX_knob = -1 // "As Played"
+  elseif LastKnob = KNOB_GATE
+    gateX_knob = Round((GetKnobValue 1) / 127 * 800)  
+    if gateX_knob < 6.25
+      gateX_knob = -1 // "As Played"
       LabelKnobs {As Played}
     else
-      LabelKnobs noteTimeX_knob*1.000, {%}
+      LabelKnobs gateX_knob*1.000, {%}
     endif
-    if mode_pad_edit = 1 and noteTimeX_knob > 0  // REFACTOR: use pad_edit_note_part below (and in other similar places)
-      noteTimeX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = noteTimeX_knob
+    if gateX_knob > 0 and mode_pad_edit = 1    // REFACTOR: use pad_edit_note_part below (and in other similar places)
+      gateX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = gateX_knob
+      Log {Recording gate change for }, pad_edit_step, {:}, pad_edit_part
+    elseif gateX_knob > 0 and midi_rec_mode <> MIDI_REC_OFF
+      gateX[(active_pattern * sizeof_pattern) + note_part] = gateX_knob
     endif
 
   elseif LastKnob = KNOB_PROBABILITY
@@ -1063,6 +1116,22 @@ step
     endif
     probability_knob = _probability
     LabelKnobs (Round probability_knob), {%}
+
+//  elseif LastKnob = KNOB_VELOCURVE
+//    _vxknob = GetKnobValue KNOB_VELOCURVE
+//    if _vxknob < 60
+//      _vx = 10 - (TranslateScale _vxknob, 0, 60, 0, 9)
+//    elseif _vxknob > 68
+//      _vx = 1.0 - (TranslateScale _vxknob, 69, 127, 0, 1)
+//    else
+//      _vx = 1.0
+//    endif
+//    if mode_pad_edit = 1
+//      note_velocityX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _vx
+//    elseif midi_rec_mode <> MIDI_REC_OFF
+//      note_velocityX[(active_pattern * sizeof_pattern) + note_part] = _vx
+//    endif
+//    LabelKnobs _vx
 
   elseif LastKnob = KNOB_MIDICH
     _midich = RoundDown((GetKnobValue KNOB_MIDICH) / 128 * 16)
@@ -1130,33 +1199,40 @@ step
 @GUI_VoicesMode
   _edit_note_part = (active_pattern * sizeof_pattern) + (pad_edit_step * step_reso) + pad_edit_part
 
+  _vcurve = note_velocityX[_edit_note_part]
   _n = voice1[_edit_note_part]
   _n1 = _n
-  LabelKnob 0, (NoteName _n, YES)
+  _v = TranslateCurve voice1_velocity[_edit_note_part], _vcurve, 0, 127 
+  LabelKnob 0, (NoteName _n, YES), {:}, Round _v
   SetKnobValue 0, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice2[_edit_note_part]
-  LabelKnob 1, (NoteName _n, YES)
+  _v = TranslateCurve voice2_velocity[_edit_note_part], _vcurve, 0, 127 
+  LabelKnob 1, (NoteName _n, YES), {:}, Round _v
   SetKnobValue 1, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice3[_edit_note_part]
-  LabelKnob 2, (NoteName _n, YES)
+  _v = TranslateCurve voice3_velocity[_edit_note_part], _vcurve, 0, 127 
+  LabelKnob 2, (NoteName _n, YES), {:}, Round _v
   SetKnobValue 2, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice4[_edit_note_part]
-  LabelKnob 3, (NoteName _n, YES)
+  _v = TranslateCurve voice4_velocity[_edit_note_part], _vcurve, 0, 127 
+  LabelKnob 3, (NoteName _n, YES), {:}, Round _v
   SetKnobValue 3, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice5[_edit_note_part]
-  LabelKnob 4, (NoteName _n, YES)
+  _v = TranslateCurve voice5_velocity[_edit_note_part], _vcurve, 0, 127 
+  LabelKnob 4, (NoteName _n, YES), {:}, Round _v
   SetKnobValue 4, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice6[_edit_note_part]
-  LabelKnob 5, (NoteName _n, YES)
+  _v = TranslateCurve voice6_velocity[_edit_note_part], _vcurve, 0, 127 
+  LabelKnob 5, (NoteName _n, YES), {:}, Round _v
   SetKnobValue 5, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
-  LabelKnob 6, {Note time}
-  _ntx = noteTimeX[_edit_note_part]
+  LabelKnob 6, {Gate}
+  _ntx = gateX[_edit_note_part]
   if _ntx <= 100
     _ntx = Round _ntx / 3.125
   else
@@ -1169,6 +1245,15 @@ step
 
   LabelKnob 8, {Ratchet}
   SetKnobValue 8, (TranslateScale note_repeat[_edit_note_part], 1, 6, 0, 127)
+
+  LabelKnob 9, {Vel-Curve}
+  _vx = note_velocityX[_edit_note_part]
+  if _vx = 1
+    _vxknob = 64
+  elseif _vx > 1
+    _vxknob = 60 - (TranslateScale _vx, 0, 1, 0, 60)
+  elseif _vx < 1
+    _vxknob = 127 - (TranslateScale _vx, 1, 10, 0, 60)
 
   LabelKnobs {⚠️ Voices for }, pad_edit_step, {:} , pad_edit_part, {  ⬆️ SHIFT to go back }
 @End
@@ -1216,7 +1301,7 @@ step
     _cnt = polycount[_note_part]
     _pad = the_part + _pad_offset
     if _cnt > 0
-      LabelPad _pad, {🔵}, _cnt, {:}, (NoteName voice1[_note_part], YES), {:}, (Round noteTimeX[_note_part])
+      LabelPad _pad, {🔵}, _cnt, {:}, (NoteName voice1[_note_part], YES), {:}, (Round gateX[_note_part])
       LatchPad _pad, 1
     else
       LatchPad _pad, 0
@@ -1307,7 +1392,7 @@ step
 @GUI_LabelKnobs
   LabelKnobs {P}, active_pattern+1, { settings}
   LabelKnob KNOB_STEP, {Step}
-  LabelKnob KNOB_NOTETIME, {Note time}
+  LabelKnob KNOB_GATE, {Gate}
   LabelKnob KNOB_PROBABILITY, {Probability}
   LabelKnob KNOB_MIDICH, {Midi CH}
   SetKnobValue KNOB_MIDICH, pattern_midich[active_pattern]*8+4 
@@ -1494,7 +1579,7 @@ To get started, just start the host and start playing - the sequencer records wh
 The sequencer has 4 views;
 - Steps; each pad is a step. When a step has parts with notes, the pad will show the number of voices allocated per part in the step. T
 - Step edit; shows one row of steps and the other row the parts of the step being edited. Accessed by tapping or holding a pad in Steps view.
-- Part edit; shows faders for all voices, note time and probability of a part. Accessed by tapping ⬆️SHIFT when in step edit view.
+- Part edit; shows faders for all voices, gate and probability of a part. Accessed by tapping ⬆️SHIFT when in step edit view.
 - Control panel; top row of pads are sequencer controls, bottom row are ARM/ON/OFF toggles for the 7 patterns. Accessed by tapping SHIFT in the Steps view. Exit by tapping SHIFT again.
 
 -- Recording --
@@ -1535,7 +1620,7 @@ It's not super-easy to hit the right note when dragging the fader - suggestions 
 
 -- Part durations --
 
-The knob "note time" sets the default note duration both for live and step recording. Note duration is measured as "percentage of step length". Thus, a note duration of 200% with the sequencer set to "1/8" will give 1/4th notes. This also means that if you change step length for the sequencer, the note durations will scale accordingly.
+The knob "gate" sets the default gate length both for live and step recording. Gate length is measured as "percentage of step length". Thus, a gate of 200% with the sequencer set to "1/8" will give 1/4th notes. This also means that if you change step length for the sequencer, the gate length will scale accordingly.
 
 Note duration knob defaults to "As played", meaning that the sequencer will use your playing (converted to a percentage of step length) as duration.
 
