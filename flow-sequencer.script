@@ -186,8 +186,8 @@
 @OnMetroPulse_CC_automation
       // CC AUTOMATION
       _slot_base = _pattern * midi_slots
-      _cc = pattern_CC_slot_map[_slot_base]
-      if midi1_value[_note_part] >= 0 and _cc >= 0
+      if midi1_value[_note_part] >= 0 
+        _cc = pattern_CC_slot_map[_slot_base]
         _val = midi1_value[_note_part]
         SendMIDICC _ch, _cc, _val, 1
         Log step, {:}, step_part, { CC },  _cc, {:}, _val
@@ -206,8 +206,8 @@
         endif
       endif
       
-      _cc = pattern_CC_slot_map[_slot_base + 1]
-      if midi2_value[_note_part] >= 0 and _cc >= 0
+      if midi2_value[_note_part] >= 0
+        _cc = pattern_CC_slot_map[_slot_base + 1]
         _val = midi2_value[_note_part]
         SendMIDICC _ch, _cc, midi2_value[_note_part], 2
         Log step, {:}, step_part, { CC },  _cc, {:}, midi2_value[_note_part]
@@ -225,8 +225,8 @@
         endif
       endif
       
-      _cc = pattern_CC_slot_map[_slot_base + 2]
-      if midi3_value[_note_part] >= 0 and _cc >= 0
+      if midi3_value[_note_part] >= 0
+        _cc = pattern_CC_slot_map[_slot_base + 2]
         _val = midi3_value[_note_part]
         SendMIDICC _ch, _cc, midi3_value[_note_part], 3 
         Log step, {:}, step_part, { CC },  _cc, {:}, midi3_value[_note_part]
@@ -244,8 +244,8 @@
         endif
       endif
       
-      _cc = pattern_CC_slot_map[_slot_base + 3]
-      if midi4_value[_note_part] >= 0 and _cc >= 0
+      if midi4_value[_note_part] >= 0
+        _cc = pattern_CC_slot_map[_slot_base + 3]
         _val = midi4_value[_note_part]      
         SendMIDICC _ch, _cc, midi4_value[_note_part], 4
         Log step, {:}, step_part, { CC },  _cc, {:}, midi4_value[_note_part]
@@ -331,10 +331,14 @@ log {voice1_vel:},voice1_velocity[_note_part],{   translated1_vel: }, _v
       _note_part = (_pattern * sizeof_pattern) + note_part
       _ch = pattern_midich[_pattern]
 
-      call @OnMetroPulse_CC_automation
+      if midi1_value[_note_part] >= 0 or midi2_value[_note_part] >= 0 or midi3_value[_note_part] >= 0 or midi4_value[_note_part] >= 0
+        call @OnMetroPulse_CC_automation
+      endif
 
-      if voice1[_note_part] >= 0 and ((Random 1, 100) <= note_probability[_note_part])
-        call @OnMetroPulse_notes
+      if voice1[_note_part] >= 0
+        if ((Random 1, 100) <= note_probability[_note_part])
+          call @OnMetroPulse_notes
+        endif
       endif
     endif
   endfor
@@ -944,13 +948,9 @@ step
   FillArray noteOnDelayTicks[_pattern_start], 0, sizeof_pattern
   FillArray note_probability[_pattern_start], 100 , sizeof_pattern
   FillArray midicount[_pattern_start], 0, sizeof_pattern
-  FillArray midi1_CC[_pattern_start], -1, sizeof_pattern
   FillArray midi1_value[_pattern_start], -1, sizeof_pattern
-  FillArray midi2_CC[_pattern_start], -1, sizeof_pattern
   FillArray midi2_value[_pattern_start], -1, sizeof_pattern
-  FillArray midi3_CC[_pattern_start], -1, sizeof_pattern
   FillArray midi3_value[_pattern_start], -1, sizeof_pattern
-  FillArray midi4_CC[_pattern_start], -1, sizeof_pattern
   FillArray midi4_value[_pattern_start], -1, sizeof_pattern
   FillArray pattern_CC_slot_map[active_pattern * midi_slots], -1, midi_slots
   FillArray note_repeat, 1
@@ -959,13 +959,9 @@ step
 @ClearActivePatternMidi
   _pattern_start = active_pattern * sizeof_pattern
   FillArray midicount[_pattern_start], 0, sizeof_pattern
-  FillArray midi1_CC[_pattern_start], -1, sizeof_pattern
   FillArray midi1_value[_pattern_start], -1, sizeof_pattern
-  FillArray midi2_CC[_pattern_start], -1, sizeof_pattern
   FillArray midi2_value[_pattern_start], -1, sizeof_pattern
-  FillArray midi3_CC[_pattern_start], -1, sizeof_pattern
   FillArray midi3_value[_pattern_start], -1, sizeof_pattern
-  FillArray midi4_CC[_pattern_start], -1, sizeof_pattern
   FillArray midi4_value[_pattern_start], -1, sizeof_pattern
   FillArray pattern_CC_slot_map[active_pattern * midi_slots], -1, midi_slots
 @End
