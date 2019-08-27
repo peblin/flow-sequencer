@@ -1108,7 +1108,7 @@ step
 @OnKnobChange_Pads
 
   if LastKnob = KNOB_GATE
-    gateX_knob = Round((GetKnobValue 1) / 127 * 800)  
+    gateX_knob = Round((GetKnobValue KNOB_GATE) / 127 * 800)  
     if gateX_knob < 6.25
       gateX_knob = -1 // "As Played"
       LabelKnobs {As Played}
@@ -1123,7 +1123,7 @@ step
     endif
 
   elseif LastKnob = KNOB_PROBABILITY
-    _probability = (GetKnobValue 2) / 127 * 100
+    _probability = (GetKnobValue KNOB_PROBABILITY) / 127 * 100
     if mode_pad_edit = 1
       note_probability[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _probability
     else
@@ -1162,7 +1162,6 @@ step
   ShowLayout 2
   uiMode = UIMODE_PADS
   Call @UpdateGUI
-  LabelKnobs {P}, active_pattern+1, { settings }
 @End
 
 @SetUIMode_Voices
@@ -1187,6 +1186,7 @@ step
 @UpdateGUI
   if uiMode = UIMODE_PADS AND mode_pad_edit = 1
     call @GUI_PadEditMode
+    Call @GUI_LabelPadEditKnobs
 
   elseif uiMode = UIMODE_PADS
     call @GUI_PadMode
@@ -1330,7 +1330,6 @@ step
   LabelPad pad_edit_step, {✅ Done}
   LabelPads {⚠️ Editing }, pad_edit_step, {:} , pad_edit_part, {  ⬆️ SHIFT for voices }
 
-  Call @GUI_LabelKnobs
 @End
 
 @GUI_ButtonMode
@@ -1406,13 +1405,21 @@ step
   LabelKnob KNOB_STEP, {Step}
   LabelKnob KNOB_MIDICH, {Midi CH}
   SetKnobValue KNOB_MIDICH, pattern_midich[active_pattern]*8+4 
+  LabelKnob 2, { }
+  LabelKnob 3, { }
 @End
 
 @GUI_LabelPadKnobs
-  LabelKnobs {Rec}, active_pattern+1, { settings}
+  LabelKnobs {P}, active_pattern+1, { rec params}
   LabelKnob KNOB_GATE, {Gate}
   LabelKnob KNOB_VELOCURVE, {Vel-Curve}
   LabelKnob KNOB_PROBABILITY, {Probability}
+  LabelKnob 3, { }
+@End
+
+@GUI_LabelPadEditKnobs
+  Call @GUI_LabelPadKnobs
+  LabelKnobs pad_edit_step, {:} , pad_edit_part, { params}
 @End
 
 //  ╔═╗╔═╗╔╦╗  ╔╦╗╔═╗╔╗╔╔═╗╔═╗╔═╗╦═╗
