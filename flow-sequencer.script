@@ -30,12 +30,14 @@
   BTN_CLEAR_ARMED = 7
   BTN_HELP = 15
 
-  // Knobs
-  KNOB_STEP = 0
-  KNOB_GATE = 1
+  // Knobs for pads
+  KNOB_GATE = 0
+  KNOB_VELOCURVE = 1
   KNOB_PROBABILITY = 2
-  KNOB_VELOCURVE = 2
-  KNOB_MIDICH = 3
+ 
+  // Knobs for pattern
+  KNOB_STEP = 0
+  KNOB_MIDICH = 1
   
   poly_offset = 0
   note_pos = 0
@@ -99,6 +101,7 @@
     tickCounter = 0
     gateX_knob = -1
     probability_knob = 100
+    velocurve_knob = 1.0
   endif
 
   SetKnobValue KNOB_STEP, 48          // 1/8
@@ -396,9 +399,12 @@ log {voice1_vel:},voice1_velocity[_note_part],{   translated1_vel: }, _v
       _note_part = (active_pattern * sizeof_pattern) + note_part
     endif
   endif
+  
+  v_trans = TranslateCurve v, velocurve_knob, 0, 127
 
   if not _supressMidiThru
-    SendMidiThruOnCh pattern_midich[active_pattern]
+    SendMIDINoteOn pattern_midich[active_pattern], nn, v_trans 
+    // SendMidiThruOnCh pattern_midich[active_pattern]
   endif
 
   _poly_offset = polycount[_note_part]
@@ -429,6 +435,7 @@ log {voice1_vel:},voice1_velocity[_note_part],{   translated1_vel: }, _v
 
   polycount[_note_part] = _poly_offset
   noteOnTicks[_note_part] = CurrentTimerTicks //total_tickCounter
+  note_velocityX[_note_part] = velocurve_knob
 
   if quantize = QUANT_NONE and HostRunning  // we can only have delay if metronome is running
     noteOnDelayTicks[_note_part] = _note_on_ticks - last_pulse_ticks
@@ -971,8 +978,10 @@ step
 //  ╩ ╩╝╚╝╚═╝╚═╝╚═╝
 
 @OnKnobChange
-  if uiMode = UIMODE_PADS or uiMode = UIMODE_BUTTONS
+  if uiMode = UIMODE_PADS 
     call @OnKnobChange_Pads
+  elseif uiMode = UIMODE_BUTTONS
+    call @OnKnobChange_Buttons
   elseif uiMode = UIMODE_VOICES
     call @OnKnobChange_Voices
   endif
@@ -1066,7 +1075,7 @@ step
   endif
 @End
 
-@OnKnobChange_Pads
+@OnKnobChange_Buttons
   if LastKnob = KNOB_STEP
     currentDivisor = Round ((GetKnobValue 0) / 16)
     if currentDivisor = 0
@@ -1088,7 +1097,17 @@ step
     endif
     call @ComputeTimes
 
-  elseif LastKnob = KNOB_GATE
+  elseif LastKnob = KNOB_MIDICH
+    _midich = RoundDown((GetKnobValue KNOB_MIDICH) / 128 * 16)
+    pattern_midich[active_pattern] = _midich
+    LabelKnobs _midich + 1
+  endif
+@End
+
+
+@OnKnobChange_Pads
+
+  if LastKnob = KNOB_GATE
     gateX_knob = Round((GetKnobValue 1) / 127 * 800)  
     if gateX_knob < 6.25
       gateX_knob = -1 // "As Played"
@@ -1113,26 +1132,22 @@ step
     probability_knob = _probability
     LabelKnobs (Round probability_knob), {%}
 
-//  elseif LastKnob = KNOB_VELOCURVE
-//    _vxknob = GetKnobValue KNOB_VELOCURVE
-//    if _vxknob < 60
-//      _vx = 10 - (TranslateScale _vxknob, 0, 60, 0, 9)
-//    elseif _vxknob > 68
-//      _vx = 1.0 - (TranslateScale _vxknob, 69, 127, 0, 1)
-//    else
-//      _vx = 1.0
-//    endif
-//    if mode_pad_edit = 1
-//      note_velocityX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _vx
-//    elseif midi_rec_mode <> MIDI_REC_OFF
-//      note_velocityX[(active_pattern * sizeof_pattern) + note_part] = _vx
-//    endif
-//    LabelKnobs _vx
-
-  elseif LastKnob = KNOB_MIDICH
-    _midich = RoundDown((GetKnobValue KNOB_MIDICH) / 128 * 16)
-    pattern_midich[active_pattern] = _midich
-    LabelKnobs _midich + 1
+  elseif LastKnob = KNOB_VELOCURVE
+    _vxknob = GetKnobValue KNOB_VELOCURVE
+    if _vxknob < 60
+      _vx = 10 - (TranslateScale _vxknob, 0, 60, 0, 9)
+    elseif _vxknob > 68
+      _vx = 1.0 - (TranslateScale _vxknob, 69, 127, 0, 1)
+    else
+      _vx = 1.0
+    endif
+    if mode_pad_edit = 1
+      note_velocityX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _vx
+    elseif midi_rec_mode <> MIDI_REC_OFF
+      note_velocityX[(active_pattern * sizeof_pattern) + note_part] = _vx
+    endif
+    LabelKnobs _vx
+    velocurve_knob = _vx
   endif
 @End
 
@@ -1175,10 +1190,11 @@ step
 
   elseif uiMode = UIMODE_PADS
     call @GUI_PadMode
+    Call @GUI_LabelPadKnobs
 
   elseif uiMode = UIMODE_BUTTONS
     call @GUI_ButtonMode 
-    call @GUI_LabelKnobs
+    call @GUI_LabelButtonKnobs
  
   elseif uiMode = UIMODE_VOICES
      call @GUI_VoicesMode
@@ -1255,7 +1271,7 @@ step
 @End
 
 @GUI_PadMode
-  Call @GUI_LabelKnobs
+
   for _step = 0 to 15
     _voice_cnt = 0
     _part_cnt = 0
@@ -1385,13 +1401,18 @@ step
   endif
 @End
 
-@GUI_LabelKnobs
+@GUI_LabelButtonKnobs
   LabelKnobs {P}, active_pattern+1, { settings}
   LabelKnob KNOB_STEP, {Step}
-  LabelKnob KNOB_GATE, {Gate}
-  LabelKnob KNOB_PROBABILITY, {Probability}
   LabelKnob KNOB_MIDICH, {Midi CH}
   SetKnobValue KNOB_MIDICH, pattern_midich[active_pattern]*8+4 
+@End
+
+@GUI_LabelPadKnobs
+  LabelKnobs {Rec}, active_pattern+1, { settings}
+  LabelKnob KNOB_GATE, {Gate}
+  LabelKnob KNOB_VELOCURVE, {Vel-Curve}
+  LabelKnob KNOB_PROBABILITY, {Probability}
 @End
 
 //  ╔═╗╔═╗╔╦╗  ╔╦╗╔═╗╔╗╔╔═╗╔═╗╔═╗╦═╗
