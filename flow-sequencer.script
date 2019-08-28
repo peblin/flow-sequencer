@@ -1642,17 +1642,35 @@ Drag faders to adjust notes. If you drag a previously unused voice it'll be adde
 
 It's not super-easy to hit the right note when dragging the fader - suggestions for improved UX welcome.
 
+-- Ratcheting --
+
+In part edit mode, you can set ratcheting from 1-6. Ratcheting splits a note into 1 to 6 smaller notes, triggering over the same gate duration as the original note. So, with ratcheting set to 3 and gate at 100% you will get one note at start part, one at 1/3 of the step length and one at 2/3 of step length.
+
+By experimenting with gate length it's very easy to make ratcheting "humanized" to create more varied fills. At the extreme, with gate length at 1600% and ratcheting set to 6 the note will trigger 6 times over the full sequencer cycle - perfect for weird ghost notes :)
+
 -- Part durations --
 
 The knob "gate" sets the default gate length both for live and step recording. Gate length is measured as "percentage of step length". Thus, a gate of 200% with the sequencer set to "1/8" will give 1/4th notes. This also means that if you change step length for the sequencer, the gate length will scale accordingly.
 
 Note duration knob defaults to "As played", meaning that the sequencer will use your playing (converted to a percentage of step length) as duration.
 
-When in part edit mode, you can set part duration from 5% to 1600% of one step. At 1600%, the note will be held for the whole loop when it will trigger again.
+When in part edit mode, you can set part duration from 5% to 1600% of one step. At 1600%, the note will be held for the whole cycle when it will trigger again.
+
+When sequencer has CC rec enabled, changes to gate will be saved live as the sequencer plays - so it's possible to automate gate changes. 
 
 -- Part probabilities --
 
-The probability knob sets the default probability for step-sequenced parts. You can also change the part probability using either the probability knob when step recording, or the probability fader in part edit view.
+The "probability" knob sets the default probability for step-sequenced parts. You can also change the part probability using either the probability knob when step recording, or the probability fader in part edit view.
+
+-- Part velocity curve --
+
+The "vel-curve" knob sets the default velocity curve when recording. Velocity curve can be set by part, in step edit mode as well as part edit mode. If you change the velocity curve in part edit mode, the faders for each voice will show the resulting velocity as fader label making it somewhat easier to understand what's happening.
+
+When velocity curve is set from 1 to 0, higher notes gets a bias. At 0, almost all notes except the very lowest ones will have maximum velocity. 
+
+When velocity curve is set from 1 to 10, lower notes gets a bias. At 10, almost no notes will have a velocity higher than 1. 
+
+When sequencer has CC rec enabled, changes to velocity curve will be saved live as the sequencer plays - so it's possible to automate velocity curve changes. 
 
 -- Pattern Midi Channel --
 
