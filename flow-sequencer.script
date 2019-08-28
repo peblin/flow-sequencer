@@ -445,7 +445,7 @@ log {voice1_vel:},voice1_velocity[_note_part],{   translated1_vel: }, _v
   noteOnTicks[_note_part] = CurrentTimerTicks //total_tickCounter
   note_velocityX[_note_part] = velocurve_knob
 
-  if quantize = QUANT_NONE and HostRunning  // we can only have delay if metronome is running
+  if quantize = QUANT_NONE and HostRunning and not mode_pad_edit // we can only have delay if metronome is running
     noteOnDelayTicks[_note_part] = _note_on_ticks - last_pulse_ticks
   else
     noteOnDelayTicks[_note_part] = 0
