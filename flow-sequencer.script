@@ -34,6 +34,7 @@
   KNOB_GATE = 0
   KNOB_VELOCURVE = 1
   KNOB_PROBABILITY = 2
+  KNOB_STRUM = 3
  
   // Knobs for pattern
   KNOB_STEP = 0
@@ -102,6 +103,7 @@
     gateX_knob = -1
     probability_knob = 100
     velocurve_knob = 1.0
+    strum_knob = 0
   endif
 
   SetKnobValue KNOB_STEP, 48          // 1/8
@@ -281,28 +283,34 @@ log {vcurve: }, _vcurve
 
         if _polycount > 5
           _v = TranslateCurve voice6_velocity[_note_part], _vcurve, 0, 127 
-          SendMIDINoteOn _ch, voice6[_note_part] + _transposeNote, _v, _noteDelay      
-          SendMIDINoteOff _ch, voice6[_note_part] + _transposeNote, 0, _gate
+          _strum = 5*strum_knob
+          SendMIDINoteOn _ch, voice6[_note_part] + _transposeNote, _v, _noteDelay + _strum
+          SendMIDINoteOff _ch, voice6[_note_part] + _transposeNote, 0, _gate + _strum
         endif
         if _polycount > 4
           _v = TranslateCurve voice5_velocity[_note_part], _vcurve, 0, 127 
-          SendMIDINoteOn _ch, voice5[_note_part] + _transposeNote, _v, _noteDelay     
-          SendMIDINoteOff _ch, voice5[_note_part] + _transposeNote, 0, _gate
+          _strum = 4*strum_knob
+          SendMIDINoteOn _ch, voice5[_note_part] + _transposeNote, _v, 
+          _noteDelay + _strum
+          SendMIDINoteOff _ch, voice5[_note_part] + _transposeNote, 0, _gate + _strum
         endif
         if _polycount > 3
           _v = TranslateCurve voice4_velocity[_note_part], _vcurve, 0, 127 
-          SendMIDINoteOn _ch, voice4[_note_part] + _transposeNote, _v, _noteDelay      
-          SendMIDINoteOff _ch, voice4[_note_part] + _transposeNote, 0, _gate
+          _strum = 3*strum_knob
+          SendMIDINoteOn _ch, voice4[_note_part] + _transposeNote, _v, _noteDelay + _strum
+          SendMIDINoteOff _ch, voice4[_note_part] + _transposeNote, 0, _gate + _strum
         endif
         if _polycount > 2
           _v = TranslateCurve voice3_velocity[_note_part], _vcurve, 0, 127 
-          SendMIDINoteOn _ch, voice3[_note_part] + _transposeNote, _v, _noteDelay      
-          SendMIDINoteOff _ch, voice3[_note_part] + _transposeNote, 0, _gate
+          _strum = 2*strum_knob
+          SendMIDINoteOn _ch, voice3[_note_part] + _transposeNote, _v, _noteDelay + _strum
+          SendMIDINoteOff _ch, voice3[_note_part] + _transposeNote, 0, _gate + _strum
         endif
         if _polycount > 1
           _v = TranslateCurve voice2_velocity[_note_part], _vcurve, 0, 127 
-          SendMIDINoteOn _ch, voice2[_note_part] + _transposeNote, _v, _noteDelay      
-          SendMIDINoteOff _ch, voice2[_note_part] + _transposeNote, 0, _gate
+          _strum = 1*strum_knob
+          SendMIDINoteOn _ch, voice2[_note_part] + _transposeNote, _v, _noteDelay + _strum
+          SendMIDINoteOff _ch, voice2[_note_part] + _transposeNote, 0, _gate + _strum
         endif
         if _polycount > 0
             _v = TranslateCurve voice1_velocity[_note_part], _vcurve, 0, 127 
@@ -1119,7 +1127,9 @@ step
       gateX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = gateX_knob
       Log {Recording gate change for }, pad_edit_step, {:}, pad_edit_part
     elseif gateX_knob > 0 and midi_rec_mode <> MIDI_REC_OFF
-      gateX[(active_pattern * sizeof_pattern) + note_part] = gateX_knob
+    // Record knob movement - to *next* part as the current has already sent its midi notes. 
+      _np = (note_part + 1) % sizeof_pattern 
+      gateX[(active_pattern * sizeof_pattern) + _np] = gateX_knob
     endif
 
   elseif LastKnob = KNOB_PROBABILITY
@@ -1143,11 +1153,15 @@ step
     endif
     if mode_pad_edit = 1
       note_velocityX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _vx
-    elseif midi_rec_mode <> MIDI_REC_OFF
-      note_velocityX[(active_pattern * sizeof_pattern) + note_part] = _vx
+    elseif midi_rec_mode <> MIDI_REC_OFF    // Record knob movement - to *next* part as the current has already sent its midi notes. 
+      _np = (note_part + 1) % sizeof_pattern 
+      note_velocityX[(active_pattern * sizeof_pattern) + _np] = _vx
     endif
     LabelKnobs _vx
     velocurve_knob = _vx
+
+    elseif LastKnob = KNOB_STRUM
+      strum_knob = GetKnobValue KNOB_STRUM
   endif
 @End
 
