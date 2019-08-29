@@ -102,8 +102,6 @@
     tickCounter = 0
     gateX_knob = -1
     probability_knob = 100
-    velocurve_knob = 1.0
-    strum_knob = 0
   endif
 
   SetKnobValue KNOB_STEP, 48          // 1/8
@@ -278,43 +276,49 @@
         _polycount = polycount[_note_part]
         _noteDelay = noteOnDelayTicks[_note_part] * timer_tick_resolution
         _gate = gate * (gateX[_note_part] / 100) + _noteDelay
-        _vcurve = note_velocityX[_note_part]
-log {vcurve: }, _vcurve
+        _vcurve = note_velocurve[_note_part]
+        if _vcurve = -1 
+          _vcurve = pattern_velocurve[active_pattern]
+        endif
+
+        _strum = note_strum[_note_part]
+        if _strum = -1
+          _strum = pattern_strum[active_pattern]
+        endif
 
         if _polycount > 5
           _v = TranslateCurve voice6_velocity[_note_part], _vcurve, 0, 127 
-          _strum = 5*strum_knob
+          _strum = 5*_strum
           SendMIDINoteOn _ch, voice6[_note_part] + _transposeNote, _v, _noteDelay + _strum
           SendMIDINoteOff _ch, voice6[_note_part] + _transposeNote, 0, _gate + _strum
         endif
         if _polycount > 4
           _v = TranslateCurve voice5_velocity[_note_part], _vcurve, 0, 127 
-          _strum = 4*strum_knob
+          _strum = 4*_strum
           SendMIDINoteOn _ch, voice5[_note_part] + _transposeNote, _v, 
           _noteDelay + _strum
           SendMIDINoteOff _ch, voice5[_note_part] + _transposeNote, 0, _gate + _strum
         endif
         if _polycount > 3
           _v = TranslateCurve voice4_velocity[_note_part], _vcurve, 0, 127 
-          _strum = 3*strum_knob
+          _strum = 3*_strum
           SendMIDINoteOn _ch, voice4[_note_part] + _transposeNote, _v, _noteDelay + _strum
           SendMIDINoteOff _ch, voice4[_note_part] + _transposeNote, 0, _gate + _strum
         endif
         if _polycount > 2
           _v = TranslateCurve voice3_velocity[_note_part], _vcurve, 0, 127 
-          _strum = 2*strum_knob
+          _strum = 2*_strum
           SendMIDINoteOn _ch, voice3[_note_part] + _transposeNote, _v, _noteDelay + _strum
           SendMIDINoteOff _ch, voice3[_note_part] + _transposeNote, 0, _gate + _strum
         endif
         if _polycount > 1
           _v = TranslateCurve voice2_velocity[_note_part], _vcurve, 0, 127 
-          _strum = 1*strum_knob
+          _strum = 1*_strum
           SendMIDINoteOn _ch, voice2[_note_part] + _transposeNote, _v, _noteDelay + _strum
           SendMIDINoteOff _ch, voice2[_note_part] + _transposeNote, 0, _gate + _strum
         endif
         if _polycount > 0
-            _v = TranslateCurve voice1_velocity[_note_part], _vcurve, 0, 127 
-log {voice1_vel:},voice1_velocity[_note_part],{   translated1_vel: }, _v
+          _v = TranslateCurve voice1_velocity[_note_part], _vcurve, 0, 127 
           _rpts = note_repeat[_note_part]
           _rpttime = _gate / _rpts
           _rptdelay = _noteDelay
@@ -380,7 +384,6 @@ log {voice1_vel:},voice1_velocity[_note_part],{   translated1_vel: }, _v
   if mode_pad_edit = 1
     pad_edit_got_note = YES
     pad_note_part = pad_edit_step * step_reso + pad_edit_part // The note location for the pad being edited. 
-
     _step = pad_edit_step
     _note_part = (active_pattern * sizeof_pattern) + pad_note_part
  
@@ -388,7 +391,6 @@ log {voice1_vel:},voice1_velocity[_note_part],{   translated1_vel: }, _v
       LabelPad pad_edit_part_pad, (NoteName nn, YES)
       LatchPad pad_edit_part_pad, 1
     endif
-
     _supressMidiThru = YES
   else
     _step = step
@@ -408,7 +410,7 @@ log {voice1_vel:},voice1_velocity[_note_part],{   translated1_vel: }, _v
     endif
   endif
   
-  v_trans = TranslateCurve v, velocurve_knob, 0, 127
+  v_trans = TranslateCurve v, pattern_velocurve[active_pattern], 0, 127
 
   if not _supressMidiThru
     SendMIDINoteOn pattern_midich[active_pattern], nn, v_trans 
@@ -443,7 +445,12 @@ log {voice1_vel:},voice1_velocity[_note_part],{   translated1_vel: }, _v
 
   polycount[_note_part] = _poly_offset
   noteOnTicks[_note_part] = CurrentTimerTicks //total_tickCounter
-  note_velocityX[_note_part] = velocurve_knob
+
+  // record knob settings if playing with CC arm on
+  if midi_rec_mode <> MIDI_REC_OFF
+    note_velocurve[_note_part] = pattern_velocurve[active_pattern]
+    note_strum[_note_part] = pattern_strum[active_pattern]
+  endif
 
   if quantize = QUANT_NONE and HostRunning and not mode_pad_edit // we can only have delay if metronome is running
     noteOnDelayTicks[_note_part] = _note_on_ticks - last_pulse_ticks
@@ -504,8 +511,8 @@ log {voice1_vel:},voice1_velocity[_note_part],{   translated1_vel: }, _v
 
   if gateX_knob < 0
     gateX[_note_part] = _elapsed_pct  // elapsed as percentage of gate
-  else
-    gateX[_note_part] = gateX_knob  // Set fixed gate from knob
+  elseif midi_rec_mode <> MIDI_REC_OFF
+    gateX[_note_part] = gateX_knob  // Set fixed gate from knob if CC arm is on 
   endif
 
   if not mode_pad_edit 
@@ -903,10 +910,12 @@ step
   CopyArray voice6_velocity[_src_pattern_pos], voice6_velocity[_dest_pattern_pos], sizeof_pattern
   CopyArray polycount[_src_pattern_pos], polycount[_dest_pattern_pos], sizeof_pattern
   CopyArray gateX[_src_pattern_pos], gateX[_dest_pattern_pos], sizeof_pattern
-  CopyArray note_velocityX[_src_pattern_pos], gateX[_dest_pattern_pos], sizeof_pattern
   CopyArray noteOnTicks[_src_pattern_pos], noteOnTicks[_dest_pattern_pos], sizeof_pattern
   CopyArray noteOnDelayTicks[_src_pattern_pos], noteOnDelayTicks[_dest_pattern_pos], sizeof_pattern
   CopyArray note_probability[_src_pattern_pos], note_probability[_dest_pattern_pos], sizeof_pattern
+  CopyArray note_velocurve[_src_pattern_pos], note_velocurve[_dest_pattern_pos], sizeof_pattern
+  CopyArray note_strum[_src_pattern_pos], note_strum[_dest_pattern_pos], sizeof_pattern
+  CopyArray note_repeat[_src_pattern_pos], note_strum[_dest_pattern_pos], sizeof_pattern
 @End
 
 //  ┌─┐┬  ┌─┐┌─┐┬─┐  ┌─┐┌─┐┌┬┐┌┬┐┌─┐┬─┐┌┐┌┌─┐
@@ -933,11 +942,14 @@ step
   FillArray midi3_value, -1
   FillArray midi4_value, -1
   FillArray pattern_CC_slot_map, -1
+  FillArray pattern_velocurve, 1.0, 8
+  FillArray pattern_strum, 0, 8
   FillArray gateX, 100
   FillArray noteOnTicks, 0
   FillArray noteOnDelayTicks, 0
   FillArray note_probability, 100
-  FillArray note_velocityX, 1.0
+  FillArray note_velocurve, -1
+  FillArray note_strum, -1
   playing_patterns = [ YES, NO, NO, NO, NO, NO, NO ]
   FillArray note_repeat, 1
 @End
@@ -958,17 +970,20 @@ step
   FillArray voice6[_pattern_start], -1, sizeof_pattern
   FillArray voice6_velocity[_pattern_start], 0, sizeof_pattern
   FillArray gateX[_pattern_start], 100, sizeof_pattern
-  FillArray note_velocityX[_pattern_start], 1.0, sizeof_pattern
   FillArray noteOnTicks[_pattern_start], 0, sizeof_pattern
   FillArray noteOnDelayTicks[_pattern_start], 0, sizeof_pattern
+  FillArray note_velocurve[_pattern_start], -1, sizeof_pattern
+  FillArray note_strum[_pattern_start], -1, sizeof_pattern
   FillArray note_probability[_pattern_start], 100 , sizeof_pattern
+  FillArray note_repeat[_pattern_start], 1, sizeof_pattern
   FillArray midicount[_pattern_start], 0, sizeof_pattern
   FillArray midi1_value[_pattern_start], -1, sizeof_pattern
   FillArray midi2_value[_pattern_start], -1, sizeof_pattern
   FillArray midi3_value[_pattern_start], -1, sizeof_pattern
   FillArray midi4_value[_pattern_start], -1, sizeof_pattern
   FillArray pattern_CC_slot_map[active_pattern * midi_slots], -1, midi_slots
-  FillArray note_repeat, 1
+  pattern_velocurve[active_pattern] = 1.0
+  pattern_strum[active_pattern] = 0
 @End
 
 @ClearActivePatternMidi
@@ -1042,7 +1057,7 @@ step
     note_repeat[_part] = _rpts
     LabelKnob 8, _rpts 
 
-  elseif _knob = 9 // note_velocityX
+  elseif _knob = 9 // note_velocurve
     _vxknob = GetKnobValue 9
     if _vxknob < 60
       _vx = 10 - (TranslateScale _vxknob, 0, 60, 0, 9)
@@ -1051,7 +1066,7 @@ step
     else
       _vx = 1.0
     endif
-    note_velocityX[_part] = _vx
+    note_velocurve[_part] = _vx
     LabelKnob 9, _vx
 
   _vcurve = _vx
@@ -1112,7 +1127,6 @@ step
   endif
 @End
 
-
 @OnKnobChange_Pads
 
   if LastKnob = KNOB_GATE
@@ -1152,16 +1166,24 @@ step
       _vx = 1.0
     endif
     if mode_pad_edit = 1
-      note_velocityX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _vx
+      note_velocurve[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _vx
     elseif midi_rec_mode <> MIDI_REC_OFF    // Record knob movement - to *next* part as the current has already sent its midi notes. 
       _np = (note_part + 1) % sizeof_pattern 
-      note_velocityX[(active_pattern * sizeof_pattern) + _np] = _vx
+      note_velocurve[(active_pattern * sizeof_pattern) + _np] = _vx
     endif
     LabelKnobs _vx
-    velocurve_knob = _vx
+    pattern_velocurve[active_pattern] = _vx
 
     elseif LastKnob = KNOB_STRUM
-      strum_knob = GetKnobValue KNOB_STRUM
+      _s = (TranslateScale (GetKnobValue KNOB_STRUM), 0, 127, 0, 60)
+      pattern_strum[active_pattern] = _s
+      if mode_pad_edit = 1
+        note_strum[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _s
+      elseif midi_rec_mode <> MIDI_REC_OFF    // Record knob movement - to *next* part as the current has already sent its midi notes. 
+        _np = (note_part + 1) % sizeof_pattern 
+        note_strum[(active_pattern * sizeof_pattern) + _np] = _s
+      endif
+      LabelKnobs (Round _s)
   endif
 @End
 
@@ -1225,7 +1247,7 @@ step
 @GUI_VoicesMode
   _edit_note_part = (active_pattern * sizeof_pattern) + (pad_edit_step * step_reso) + pad_edit_part
 
-  _vcurve = note_velocityX[_edit_note_part]
+  _vcurve = note_velocurve[_edit_note_part]
   _n = voice1[_edit_note_part]
   _n1 = _n
   _v = TranslateCurve voice1_velocity[_edit_note_part], _vcurve, 0, 127 
@@ -1273,7 +1295,7 @@ step
   SetKnobValue 8, (TranslateScale note_repeat[_edit_note_part], 1, 6, 0, 127)
 
   LabelKnob 9, {Vel-Curve}
-  _vx = note_velocityX[_edit_note_part]
+  _vx = note_velocurve[_edit_note_part]
   if _vx = 1
     _vxknob = 64
   elseif _vx > 1
@@ -1281,6 +1303,8 @@ step
   elseif _vx < 1
     _vxknob = 127 - (TranslateScale _vx, 1, 10, 0, 60)
   endif
+  SetKnobValue KNOB_VELOCURVE, _vxknob
+
   LabelKnobs {⚠️ Voices for }, pad_edit_step, {:} , pad_edit_part, {  ⬆️ SHIFT to go back }
 @End
 
@@ -1426,9 +1450,30 @@ step
 @GUI_LabelPadKnobs
   LabelKnobs {P}, active_pattern+1, { rec params}
   LabelKnob KNOB_GATE, {Gate}
+  _ntx = gateX_knob
+  if _ntx <= 100
+    _ntx = Round _ntx / 3.125
+  else
+    _ntx = Round ((((_ntx - 100) / 1500) * 95) + 32)
+  endif
+  SetKnobValue KNOB_GATE, _ntx
+
   LabelKnob KNOB_VELOCURVE, {Vel-Curve}
+  _vx = pattern_velocurve[active_pattern]
+  Log {velocurve this pattern: }, _vx
+  if _vx = 1
+    _vxknob = 64
+  elseif _vx > 1
+    _vxknob = 60 - (TranslateScale _vx, 1, 10, 0, 60)
+  elseif _vx < 1
+    _vxknob = 127 - (TranslateScale _vx, 0, 1, 0, 60)
+  endif
+  SetKnobValue KNOB_VELOCURVE, _vxknob
+
   LabelKnob KNOB_PROBABILITY, {Probability}
-  LabelKnob 3, { }
+  LabelKnob KNOB_STRUM, {Strum}
+  SetKnobValue KNOB_STRUM, (TranslateScale pattern_strum[active_pattern], 0, 60, 0, 127) 
+ 
 @End
 
 @GUI_LabelPadEditKnobs
