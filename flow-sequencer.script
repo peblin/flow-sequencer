@@ -40,6 +40,27 @@
   KNOB_STEP = 0
   KNOB_MIDICH = 1
   
+  // Knobs for voices
+  VKNOB_VOICE1 = 0
+  VKNOB_VOICE2 = 1
+  VKNOB_VOICE3 = 2
+  VKNOB_VOICE4 = 3
+  VKNOB_VOICE5 = 4
+  VKNOB_VOICE6 = 5
+  VKNOB_PROBABILITY = 11
+  VKNOB_GATE = 12
+  VKNOB_RATCHET = 13
+  VKNOB_STRUM = 14
+  VKNOB_VELCURVE = 15
+  VKNOB_SLOT1CC = 18
+  VKNOB_SLOT2CC = 19
+  VKNOB_SLOT3CC = 20
+  VKNOB_SLOT4CC = 21
+  VKNOB_SLOT1VAL = 7
+  VKNOB_SLOT2VAL = 8
+  VKNOB_SLOT3VAL = 9
+  VKNOB_SLOT4VAL = 10
+
   poly_offset = 0
   note_pos = 0
   note_part = 0
@@ -285,40 +306,41 @@
         if _strum = -1
           _strum = pattern_strum[active_pattern]
         endif
+        Log {Strum: }, _strum
 
         if _polycount > 5
-          _v = TranslateCurve voice6_velocity[_note_part], _vcurve, 0, 127 
-          _strum = 5*_strum
-          SendMIDINoteOn _ch, voice6[_note_part] + _transposeNote, _v, _noteDelay + _strum
-          SendMIDINoteOff _ch, voice6[_note_part] + _transposeNote, 0, _gate + _strum
+          _v = Clip voice6_velocity[_note_part] * _vcurve, 0, 127 
+          _s = 5*_strum
+          SendMIDINoteOn _ch, voice6[_note_part] + _transposeNote, _v, _noteDelay + _s
+          SendMIDINoteOff _ch, voice6[_note_part] + _transposeNote, 0, _gate + _s
         endif
         if _polycount > 4
-          _v = TranslateCurve voice5_velocity[_note_part], _vcurve, 0, 127 
-          _strum = 4*_strum
+          _v = Clip voice5_velocity[_note_part] * _vcurve, 0, 127 
+          _s = 4*_strum
           SendMIDINoteOn _ch, voice5[_note_part] + _transposeNote, _v, 
-          _noteDelay + _strum
-          SendMIDINoteOff _ch, voice5[_note_part] + _transposeNote, 0, _gate + _strum
+          _noteDelay + _s
+          SendMIDINoteOff _ch, voice5[_note_part] + _transposeNote, 0, _gate + _s
         endif
         if _polycount > 3
-          _v = TranslateCurve voice4_velocity[_note_part], _vcurve, 0, 127 
-          _strum = 3*_strum
-          SendMIDINoteOn _ch, voice4[_note_part] + _transposeNote, _v, _noteDelay + _strum
-          SendMIDINoteOff _ch, voice4[_note_part] + _transposeNote, 0, _gate + _strum
+          _v = Clip voice4_velocity[_note_part] * _vcurve, 0, 127 
+          _s = 3*_strum
+          SendMIDINoteOn _ch, voice4[_note_part] + _transposeNote, _v, _noteDelay + _s
+          SendMIDINoteOff _ch, voice4[_note_part] + _transposeNote, 0, _gate + _s
         endif
         if _polycount > 2
-          _v = TranslateCurve voice3_velocity[_note_part], _vcurve, 0, 127 
-          _strum = 2*_strum
-          SendMIDINoteOn _ch, voice3[_note_part] + _transposeNote, _v, _noteDelay + _strum
-          SendMIDINoteOff _ch, voice3[_note_part] + _transposeNote, 0, _gate + _strum
+          _v = Clip voice3_velocity[_note_part] * _vcurve, 0, 127 
+          _s = 2*_strum
+          SendMIDINoteOn _ch, voice3[_note_part] + _transposeNote, _v, _noteDelay + _s
+          SendMIDINoteOff _ch, voice3[_note_part] + _transposeNote, 0, _gate + _s
         endif
         if _polycount > 1
-          _v = TranslateCurve voice2_velocity[_note_part], _vcurve, 0, 127 
-          _strum = 1*_strum
-          SendMIDINoteOn _ch, voice2[_note_part] + _transposeNote, _v, _noteDelay + _strum
-          SendMIDINoteOff _ch, voice2[_note_part] + _transposeNote, 0, _gate + _strum
+          _v = Clip voice2_velocity[_note_part] * _vcurve, 0, 127 
+          _s = 1*_strum
+          SendMIDINoteOn _ch, voice2[_note_part] + _transposeNote, _v, _noteDelay + _s
+          SendMIDINoteOff _ch, voice2[_note_part] + _transposeNote, 0, _gate + _s
         endif
         if _polycount > 0
-          _v = TranslateCurve voice1_velocity[_note_part], _vcurve, 0, 127 
+          _v = Clip voice1_velocity[_note_part] * _vcurve, 0, 127 
           _rpts = note_repeat[_note_part]
           _rpttime = _gate / _rpts
           _rptdelay = _noteDelay
@@ -410,7 +432,7 @@
     endif
   endif
   
-  v_trans = TranslateCurve v, pattern_velocurve[active_pattern], 0, 127
+  v_trans = Clip v * pattern_velocurve[active_pattern], 0, 127 
 
   if not _supressMidiThru
     SendMIDINoteOn pattern_midich[active_pattern], nn, v_trans 
@@ -538,7 +560,7 @@
     pad_note_part = pad_edit_step * step_reso + pad_edit_part // The note location for the pad being edited. 
     _step = pad_edit_step
     _note_part = (active_pattern * sizeof_pattern) + pad_note_part
-step
+
     LabelPad pad_edit_part_pad, {CC: }, _cc, {:}, _val
     _supressMidiThru = YES
   else
@@ -603,6 +625,21 @@ step
     midi4_value[_note_part] = _val
   endif
 
+  _midicount = 0
+  if pattern_CC_slot_map[_slot_base] > -1
+    Inc _midicount
+  endif
+  if pattern_CC_slot_map[_slot_base +1] > -1
+    Inc _midicount
+  endif
+  if pattern_CC_slot_map[_slot_base +2] > -1
+    Inc _midicount
+  endif
+  if pattern_CC_slot_map[_slot_base +3] > -1
+    Inc _midicount
+  endif
+
+  midicount[_note_part] = _midicount
 
   Log {Recorded midi, CC: }, _cc, {:}, _val, { -> offset: }, _midi_offset, {)},{ part:}, _note_part
 @End
@@ -624,9 +661,6 @@ step
   elseif uiMode = UIMODE_HELP
     Call @SetUIMode_Buttons
   endif
-@End 
-
-@OnShiftUp
 @End 
 
 
@@ -1013,33 +1047,33 @@ step
 @OnKnobChange_Voices
   _part = pad_edit_note_part
   _knob = LastKnob
-  _note = GetKnobValue _knob
+  _value = GetKnobValue _knob
   _voice = _knob + 1
  
   if polycount[_part] < _voice and _voice <= 6
     polycount[_part] = _voice
   endif
   
-  if _knob = 0
-    voice1[_part] = _note
-    LabelKnob 0, (NoteName _note, YES)
-  elseif _knob = 1
-    voice2[_part] = _note
-    LabelKnob 1, (NoteName _note, YES)
-  elseif _knob = 2
-    voice3[_part] = _note
-    LabelKnob 2, (NoteName _note, YES)
-  elseif _knob = 3
-    voice4[_part] = _note
-    LabelKnob 3, (NoteName _note, YES)
-  elseif _knob = 4
-    voice5[_part] = _note
-    LabelKnob 4, (NoteName _note, YES)
-  elseif _knob = 5
-    voice6[_part] = _note
-    LabelKnob 5, (NoteName _note, YES)
-  elseif _knob = 6  // gate. knob is mapped linearly from 0-100% for the first 1/4 of the slider, then from 100-1600 for the "upper" 75%.
-    _ntx = (GetKnobValue 6)
+  if _knob = VKNOB_VOICE1
+    voice1[_part] = _value
+    LabelKnob VKNOB_VOICE1, (NoteName _value, YES)
+  elseif _knob = VKNOB_VOICE2
+    voice2[_part] = _value
+    LabelKnob VKNOB_VOICE2, (NoteName _value, YES)
+  elseif _knob = VKNOB_VOICE3
+    voice3[_part] = _value
+    LabelKnob VKNOB_VOICE3, (NoteName _value, YES)
+  elseif _knob = VKNOB_VOICE4
+    voice4[_part] = _value
+    LabelKnob VKNOB_VOICE4, (NoteName _value, YES)
+  elseif _knob = VKNOB_VOICE5
+    voice5[_part] = _value
+    LabelKnob VKNOB_VOICE5, (NoteName _value, YES)
+  elseif _knob = VKNOB_VOICE6
+    voice6[_part] = _value
+    LabelKnob VKNOB_VOICE6, (NoteName _value, YES)
+  elseif _knob = VKNOB_GATE  // gate. knob is mapped linearly from 0-100% for the first 1/4 of the slider, then from 100-1600 for the "upper" 75%.
+    _ntx = _value
     if _ntx <= 32
       _ntx = Round(_ntx * 3.125)
     else
@@ -1047,18 +1081,18 @@ step
     endif
     Log {New gate: }, _ntx
     gateX[_part] = _ntx
-    LabelKnob 6, _ntx
-  elseif _knob = 7  // probability
-    _p = Round((GetKnobValue 7) / 127 * 100)
+    LabelKnob VKNOB_GATE, _ntx
+  elseif _knob = VKNOB_PROBABILITY 
+    _p = Round(_value / 127 * 100)
     note_probability[_part] = _p
-    LabelKnob 7, _p
-  elseif _knob = 8 // note_ratchet
-    _rpts = (Round (TranslateScale (GetKnobValue 8), 1, 127, 1, 6))
+    LabelKnob VKNOB_PROBABILITY, _p
+  elseif _knob = VKNOB_RATCHET
+    _rpts = (Round (TranslateScale _value, 1, 127, 1, 6))
     note_repeat[_part] = _rpts
-    LabelKnob 8, _rpts 
+    LabelKnob VKNOB_RATCHET, _rpts 
 
-  elseif _knob = 9 // note_velocurve
-    _vxknob = GetKnobValue 9
+  elseif _knob = VKNOB_VELCURVE 
+    _vxknob = _value
     if _vxknob < 60
       _vx = 10 - (TranslateScale _vxknob, 0, 60, 0, 9)
     elseif _vxknob > 68
@@ -1067,40 +1101,41 @@ step
       _vx = 1.0
     endif
     note_velocurve[_part] = _vx
-    LabelKnob 9, _vx
+    LabelKnob VKNOB_VELCURVE, _vx
 
-  _vcurve = _vx
-  _n = voice1[_part]
-  _n1 = _n
-  _v = TranslateCurve voice1_velocity[_part], _vcurve, 0, 127 
-  LabelKnob 0, (NoteName _n, YES), {:}, Round _v
+    _vcurve = _vx
+    _n = voice1[_part]
+    _n1 = _n
 
-  _n = voice2[_part]
-  _v = TranslateCurve voice2_velocity[_part], _vcurve, 0, 127 
-  LabelKnob 1, (NoteName _n, YES), {:}, Round _v
+    _v = Clip voice1_velocity[_part] * _vcurve, 0, 127 
+    LabelKnob 0, (NoteName _n, YES), {:}, Round _v
 
-  _n = voice3[_part]
-  _v = TranslateCurve voice3_velocity[_part], _vcurve, 0, 127 
-  LabelKnob 2, (NoteName _n, YES), {:}, Round _v
+    _n = voice2[_part]
+    _v = Clip voice2_velocity[_part] * _vcurve, 0, 127 
+    LabelKnob 1, (NoteName _n, YES), {:}, Round _v
 
-  _n = voice4[_part]
-  _v = TranslateCurve voice4_velocity[_part], _vcurve, 0, 127 
-  LabelKnob 3, (NoteName _n, YES), {:}, Round _v
+    _n = voice3[_part]
+    _v = Clip voice3_velocity[_part] * _vcurve, 0, 127 
+    LabelKnob 2, (NoteName _n, YES), {:}, Round _v
 
-  _n = voice5[_part]
-  _v = TranslateCurve voice5_velocity[_part], _vcurve, 0, 127 
-  LabelKnob 4, (NoteName _n, YES), {:}, Round _v
+    _n = voice4[_part]
+    _v = Clip voice4_velocity[_part] * _vcurve, 0, 127 
+    LabelKnob 3, (NoteName _n, YES), {:}, Round _v
 
-  _n = voice6[_part]
-  _v = TranslateCurve voice6_velocity[_part], _vcurve, 0, 127 
-  LabelKnob 5, (NoteName _n, YES), {:}, Round _v
+    _n = voice5[_part]
+    _v = Clip voice5_velocity[_part] * _vcurve, 0, 127 
+    LabelKnob 4, (NoteName _n, YES), {:}, Round _v
+
+    _n = voice6[_part]
+    _v = Clip voice6_velocity[_part] * _vcurve, 0, 127 
+    LabelKnob 5, (NoteName _n, YES), {:}, Round _v
 
   endif
 @End
 
 @OnKnobChange_Buttons
   if LastKnob = KNOB_STEP
-    currentDivisor = Round ((GetKnobValue 0) / 16)
+    currentDivisor = Round ((GetKnobValue KNOB_STEP) / 16)
     if currentDivisor = 0
       LabelKnobs {1/32}
     elseif currentDivisor = 1
@@ -1175,7 +1210,7 @@ step
     pattern_velocurve[active_pattern] = _vx
 
     elseif LastKnob = KNOB_STRUM
-      _s = (TranslateScale (GetKnobValue KNOB_STRUM), 0, 127, 0, 60)
+      _s = (TranslateScale (GetKnobValue KNOB_STRUM), 0, 127, 0, 200)
       pattern_strum[active_pattern] = _s
       if mode_pad_edit = 1
         note_strum[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _s
@@ -1201,7 +1236,7 @@ step
 @End
 
 @SetUIMode_Voices
-  ShowLayout 3
+  ShowLayout 1
   uiMode = UIMODE_VOICES
   Call @UpdateGUI
 @End
@@ -1250,51 +1285,51 @@ step
   _vcurve = note_velocurve[_edit_note_part]
   _n = voice1[_edit_note_part]
   _n1 = _n
-  _v = TranslateCurve voice1_velocity[_edit_note_part], _vcurve, 0, 127 
-  LabelKnob 0, (NoteName _n, YES), {:}, Round _v
-  SetKnobValue 0, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+  _v = Clip voice1_velocity[_edit_note_part] * _vcurve, 0, 127 
+  LabelKnob VKNOB_VOICE1, (NoteName _n, YES), {:}, Round _v
+  SetKnobValue VKNOB_VOICE1, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice2[_edit_note_part]
-  _v = TranslateCurve voice2_velocity[_edit_note_part], _vcurve, 0, 127 
-  LabelKnob 1, (NoteName _n, YES), {:}, Round _v
-  SetKnobValue 1, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+  _v = Clip voice2_velocity[_edit_note_part] * _vcurve, 0, 127 
+  LabelKnob VKNOB_VOICE2, (NoteName _n, YES), {:}, Round _v
+  SetKnobValue VKNOB_VOICE2, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice3[_edit_note_part]
-  _v = TranslateCurve voice3_velocity[_edit_note_part], _vcurve, 0, 127 
-  LabelKnob 2, (NoteName _n, YES), {:}, Round _v
-  SetKnobValue 2, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+  _v = Clip voice3_velocity[_edit_note_part] * _vcurve, 0, 127 
+  LabelKnob VKNOB_VOICE3, (NoteName _n, YES), {:}, Round _v
+  SetKnobValue VKNOB_VOICE3, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice4[_edit_note_part]
-  _v = TranslateCurve voice4_velocity[_edit_note_part], _vcurve, 0, 127 
-  LabelKnob 3, (NoteName _n, YES), {:}, Round _v
-  SetKnobValue 3, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+  _v = Clip voice4_velocity[_edit_note_part] * _vcurve, 0, 127 
+  LabelKnob VKNOB_VOICE4, (NoteName _n, YES), {:}, Round _v
+  SetKnobValue VKNOB_VOICE4, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice5[_edit_note_part]
-  _v = TranslateCurve voice5_velocity[_edit_note_part], _vcurve, 0, 127 
-  LabelKnob 4, (NoteName _n, YES), {:}, Round _v
-  SetKnobValue 4, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+  _v = Clip voice5_velocity[_edit_note_part] * _vcurve, 0, 127 
+  LabelKnob VKNOB_VOICE5, (NoteName _n, YES), {:}, Round _v
+  SetKnobValue VKNOB_VOICE5, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice6[_edit_note_part]
-  _v = TranslateCurve voice6_velocity[_edit_note_part], _vcurve, 0, 127 
-  LabelKnob 5, (NoteName _n, YES), {:}, Round _v
-  SetKnobValue 5, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+  _v = Clip voice6_velocity[_edit_note_part] * _vcurve, 0, 127 
+  LabelKnob VKNOB_VOICE6, (NoteName _n, YES), {:}, Round _v
+  SetKnobValue VKNOB_VOICE6, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
-  LabelKnob 6, {Gate}
+  LabelKnob VKNOB_GATE, {Gate}
   _ntx = gateX[_edit_note_part]
   if _ntx <= 100
     _ntx = Round _ntx / 3.125
   else
     _ntx = Round ((((_ntx - 100) / 1500) * 95) + 32)
   endif
-  SetKnobValue 6, _ntx
+  SetKnobValue VKNOB_GATE, _ntx
 
-  LabelKnob 7, {Probability}
-  SetKnobValue 7, (TranslateScale note_probability[_edit_note_part], 0, 100, 0, 127)
+  LabelKnob VKNOB_PROBABILITY, {Probability}
+  SetKnobValue VKNOB_PROBABILITY, (TranslateScale note_probability[_edit_note_part], 0, 100, 0, 127)
 
-  LabelKnob 8, {Ratchet}
-  SetKnobValue 8, (TranslateScale note_repeat[_edit_note_part], 1, 6, 0, 127)
+  LabelKnob VKNOB_RATCHET, {Ratchet}
+  SetKnobValue VKNOB_RATCHET, (TranslateScale note_repeat[_edit_note_part], 1, 6, 0, 127)
 
-  LabelKnob 9, {Vel-Curve}
+  LabelKnob VKNOB_VELCURVE, {Vel-Curve}
   _vx = note_velocurve[_edit_note_part]
   if _vx = 1
     _vxknob = 64
@@ -1303,7 +1338,28 @@ step
   elseif _vx < 1
     _vxknob = 127 - (TranslateScale _vx, 1, 10, 0, 60)
   endif
-  SetKnobValue KNOB_VELOCURVE, _vxknob
+  SetKnobValue VKNOB_VELCURVE, _vxknob
+
+  LabelKnob VKNOB_SLOT1CC, {A:CC }, pattern_CC_slot_map[active_pattern*midi_slots]
+  SetKnobValue VKNOB_SLOT1CC, pattern_CC_slot_map[active_pattern*midi_slots]
+  LabelKnob VKNOB_SLOT2CC, {B:CC }, pattern_CC_slot_map[active_pattern*midi_slots +1]
+  SetKnobValue VKNOB_SLOT2CC, pattern_CC_slot_map[active_pattern*midi_slots + 1]
+  LabelKnob VKNOB_SLOT3CC, {C:CC }, pattern_CC_slot_map[active_pattern*midi_slots+2]
+  SetKnobValue VKNOB_SLOT3CC, pattern_CC_slot_map[active_pattern*midi_slots + 2]
+  LabelKnob VKNOB_SLOT4CC, {D:CC }, pattern_CC_slot_map[active_pattern*midi_slots+3]
+  SetKnobValue VKNOB_SLOT4CC, pattern_CC_slot_map[active_pattern*midi_slots + 3]
+
+  LabelKnob VKNOB_SLOT1VAL, {A: }, midi1_value[_edit_note_part]
+  SetKnobValue VKNOB_SLOT1VAL, midi1_value[_edit_note_part]
+
+  LabelKnob VKNOB_SLOT2VAL, {B: }, midi2_value[_edit_note_part]
+  SetKnobValue VKNOB_SLOT2VAL, midi2_value[_edit_note_part]
+
+  LabelKnob VKNOB_SLOT3VAL, {C: }, midi3_value[_edit_note_part]
+  SetKnobValue VKNOB_SLOT3VAL, midi3_value[_edit_note_part]
+
+  LabelKnob VKNOB_SLOT4VAL, {D: }, midi4_value[_edit_note_part]
+  SetKnobValue VKNOB_SLOT4VAL, midi4_value[_edit_note_part]
 
   LabelKnobs {⚠️ Voices for }, pad_edit_step, {:} , pad_edit_part, {  ⬆️ SHIFT to go back }
 @End
@@ -1314,16 +1370,24 @@ step
     _voice_cnt = 0
     _part_cnt = 0
     _po = (active_pattern * sizeof_pattern) + (_step * step_reso)
-
     _pc = polycount[_po+0] + polycount[_po+1] + polycount[_po+2] + polycount[_po+3] + polycount[_po+4] + polycount[_po+5] + polycount[_po+6] + polycount[_po+7]
-
+    _mc = midicount[_po+0] + midicount[_po+1] + midicount[_po+2] + midicount[_po+3] + midicount[_po+4] + midicount[_po+5] + midicount[_po+6] + midicount[_po+7]
+    
     if _pc > 0
       LatchPad _step, 1
       // Row below triggers parser bug in Mozaic if there are spaces after commas
-      LabelPad _step,polycount[_po+0],polycount[_po+1],polycount[_po+2],polycount[_po+3],polycount[_po+4],polycount[_po+5],polycount[_po+6],polycount[_po+7]
+      if _mc > 0
+        LabelPad _step,{A},polycount[_po+0],polycount[_po+1],polycount[_po+2],polycount[_po+3],polycount[_po+4],polycount[_po+5],polycount[_po+6],polycount[_po+7]
+      else
+        LabelPad _step,polycount[_po+0],polycount[_po+1],polycount[_po+2],polycount[_po+3],polycount[_po+4],polycount[_po+5],polycount[_po+6],polycount[_po+7]
+      endif
     else
       LatchPad _step, 0
-      LabelPad _step, { }
+      if _mc > 0
+        LabelPad _step, {A}
+      else
+        LabelPad _step, { }
+      endif
     endif
   endfor
   
@@ -1349,13 +1413,22 @@ step
   for the_part = 0 to step_reso-1
     _note_part = (active_pattern * sizeof_pattern) + (pad_edit_step * step_reso + the_part)
     _cnt = polycount[_note_part]
+    _mc = midicount[_note_part]
     _pad = the_part + _pad_offset
     if _cnt > 0
-      LabelPad _pad, {🔵}, _cnt, {:}, (NoteName voice1[_note_part], YES), {:}, (Round gateX[_note_part])
+      if _mc > 0
+        LabelPad _pad, _cnt, {:}, (NoteName voice1[_note_part], YES), {:}, (Round gateX[_note_part]), {A}
+      else
+        LabelPad _pad, _cnt, {:}, (NoteName voice1[_note_part], YES), {:}, (Round gateX[_note_part])
+      endif
       LatchPad _pad, 1
-    else
+    else // {🔵},
       LatchPad _pad, 0
-      LabelPad _pad, {⚪️}
+      if _mc > 0
+        LabelPad _pad, {⚪️ A}
+      else
+        LabelPad _pad, {⚪️}, 
+      endif
     endif
   endfor
 
@@ -1472,7 +1545,7 @@ step
 
   LabelKnob KNOB_PROBABILITY, {Probability}
   LabelKnob KNOB_STRUM, {Strum}
-  SetKnobValue KNOB_STRUM, (TranslateScale pattern_strum[active_pattern], 0, 60, 0, 127) 
+  SetKnobValue KNOB_STRUM, (TranslateScale pattern_strum[active_pattern], 0, 200, 0, 127) 
  
 @End
 
@@ -1707,7 +1780,17 @@ In part edit mode, you can set ratcheting from 1-6. Ratcheting splits a note int
 
 By experimenting with gate length it's very easy to make ratcheting "humanized" to create more varied fills. At the extreme, with gate length at 1600% and ratcheting set to 6 the note will trigger 6 times over the full sequencer cycle - perfect for weird ghost notes :)
 
--- Part durations --
+-- Strumming --
+
+You can set strum in milliseconds per pattern and/or per part (in both step and part edit modes). 
+
+Voice playback will be strummed by delaying each voice with the strum amount multiplied with voice number (starting with 0). So, a strum value of 10ms will play voice0 at time 0, voice1 10ms later, voice2 20ms later and so on. 
+
+By recording chords “in reverse”, ie highest note first, you can simulate both up and down strums as if it were a guitar. Strumming can also be used creatively with drums if several drum hits are on the same part - by setting the strum value they’ll be slightly separated, for a more humanized feel.
+
+When sequencer has CC rec enabled, changes to strum will be saved live as the sequencer plays. 
+
+-- Gate --
 
 The knob "gate" sets the default gate length both for live and step recording. Gate length is measured as "percentage of step length". Thus, a gate of 200% with the sequencer set to "1/8" will give 1/4th notes. This also means that if you change step length for the sequencer, the gate length will scale accordingly.
 
@@ -1715,13 +1798,13 @@ Note duration knob defaults to "As played", meaning that the sequencer will use 
 
 When in part edit mode, you can set part duration from 5% to 1600% of one step. At 1600%, the note will be held for the whole cycle when it will trigger again.
 
-When sequencer has CC rec enabled, changes to gate will be saved live as the sequencer plays - so it's possible to automate gate changes. 
+When sequencer has CC rec enabled, changes to gate will be saved live as the sequencer plays. 
 
--- Part probabilities --
+-- Probability --
 
 The "probability" knob sets the default probability for step-sequenced parts. You can also change the part probability using either the probability knob when step recording, or the probability fader in part edit view.
 
--- Part velocity curve --
+-- Velocity curve --
 
 The "vel-curve" knob sets the default velocity curve when recording. Velocity curve can be set by part, in step edit mode as well as part edit mode. If you change the velocity curve in part edit mode, the faders for each voice will show the resulting velocity as fader label making it somewhat easier to understand what's happening.
 
