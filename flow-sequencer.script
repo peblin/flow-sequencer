@@ -297,7 +297,7 @@
         _polycount = polycount[_note_part]
         _noteDelay = noteOnDelayTicks[_note_part] * timer_tick_resolution
         _gate = gate * (gateX[_note_part] / 100) + _noteDelay
-        _vcurve = note_velocurve[_note_part]
+        _vcurve = note_velocityX[_note_part]
         if _vcurve = -1 
           _vcurve = pattern_velocurve[active_pattern]
         endif
@@ -470,7 +470,7 @@
 
   // record knob settings if playing with CC arm on
   if midi_rec_mode <> MIDI_REC_OFF
-    note_velocurve[_note_part] = pattern_velocurve[active_pattern]
+    note_velocityX[_note_part] = pattern_velocurve[active_pattern]
     note_strum[_note_part] = pattern_strum[active_pattern]
   endif
 
@@ -991,7 +991,7 @@
     else
       _vx = 1.0
     endif
-    note_velocurve[_part] = _vx
+    note_velocityX[_part] = _vx
     if _vx >= 0
       LabelKnobs (Round _vx * 100), {%}
     else
@@ -1148,10 +1148,10 @@
     endif
 
     if mode_pad_edit = 1
-      note_velocurve[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _vx
+      note_velocityX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _vx
     elseif midi_rec_mode <> MIDI_REC_OFF    // Record knob movement - to *next* part as the current has already sent its midi notes. 
       _np = (note_part + 1) % sizeof_pattern 
-      note_velocurve[(active_pattern * sizeof_pattern) + _np] = _vx
+      note_velocityX[(active_pattern * sizeof_pattern) + _np] = _vx
     endif
     if _vx >= 0
       LabelKnobs (Round _vx * 100), {%}
@@ -1200,7 +1200,7 @@
   CopyArray noteOnTicks[_src_pattern_pos], noteOnTicks[_dest_pattern_pos], sizeof_pattern
   CopyArray noteOnDelayTicks[_src_pattern_pos], noteOnDelayTicks[_dest_pattern_pos], sizeof_pattern
   CopyArray note_probability[_src_pattern_pos], note_probability[_dest_pattern_pos], sizeof_pattern
-  CopyArray note_velocurve[_src_pattern_pos], note_velocurve[_dest_pattern_pos], sizeof_pattern
+  CopyArray note_velocityX[_src_pattern_pos], note_velocityX[_dest_pattern_pos], sizeof_pattern
   CopyArray note_strum[_src_pattern_pos], note_strum[_dest_pattern_pos], sizeof_pattern
   CopyArray note_repeat[_src_pattern_pos], note_strum[_dest_pattern_pos], sizeof_pattern
 @End
@@ -1235,7 +1235,7 @@
   FillArray noteOnTicks, 0
   FillArray noteOnDelayTicks, 0
   FillArray note_probability, 100
-  FillArray note_velocurve, -1
+  FillArray note_velocityX, -1
   FillArray note_strum, -1
   playing_patterns = [ YES, NO, NO, NO, NO, NO, NO ]
   FillArray note_repeat, 1
@@ -1259,7 +1259,7 @@
   FillArray gateX[_pattern_start], 100, sizeof_pattern
   FillArray noteOnTicks[_pattern_start], 0, sizeof_pattern
   FillArray noteOnDelayTicks[_pattern_start], 0, sizeof_pattern
-  FillArray note_velocurve[_pattern_start], -1, sizeof_pattern
+  FillArray note_velocityX[_pattern_start], -1, sizeof_pattern
   FillArray note_strum[_pattern_start], -1, sizeof_pattern
   FillArray note_probability[_pattern_start], 100 , sizeof_pattern
   FillArray note_repeat[_pattern_start], 1, sizeof_pattern
@@ -1343,35 +1343,35 @@
 @GUI_VoicesMode
   _edit_note_part = (active_pattern * sizeof_pattern) + (pad_edit_step * step_reso) + pad_edit_part
 
-  _vcurve = note_velocurve[_edit_note_part]
   _n = voice1[_edit_note_part]
   _n1 = _n
-  _v = Clip voice1_velocity[_edit_note_part] * _vcurve, 0, 127 
+  _v = voice1_velocity[_edit_note_part] 
+
   LabelKnob VKNOB_VOICE1, (NoteName _n, YES), {:}, Round _v
   SetKnobValue VKNOB_VOICE1, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice2[_edit_note_part]
-  _v = Clip voice2_velocity[_edit_note_part] * _vcurve, 0, 127 
+  _v = voice2_velocity[_edit_note_part] 
   LabelKnob VKNOB_VOICE2, (NoteName _n, YES), {:}, Round _v
   SetKnobValue VKNOB_VOICE2, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice3[_edit_note_part]
-  _v = Clip voice3_velocity[_edit_note_part] * _vcurve, 0, 127 
+  _v = voice3_velocity[_edit_note_part] 
   LabelKnob VKNOB_VOICE3, (NoteName _n, YES), {:}, Round _v
   SetKnobValue VKNOB_VOICE3, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice4[_edit_note_part]
-  _v = Clip voice4_velocity[_edit_note_part] * _vcurve, 0, 127 
+  _v = voice4_velocity[_edit_note_part] 
   LabelKnob VKNOB_VOICE4, (NoteName _n, YES), {:}, Round _v
   SetKnobValue VKNOB_VOICE4, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice5[_edit_note_part]
-  _v = Clip voice5_velocity[_edit_note_part] * _vcurve, 0, 127 
+  _v = voice5_velocity[_edit_note_part] 
   LabelKnob VKNOB_VOICE5, (NoteName _n, YES), {:}, Round _v
   SetKnobValue VKNOB_VOICE5, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice6[_edit_note_part]
-  _v = Clip voice6_velocity[_edit_note_part] * _vcurve, 0, 127 
+  _v = voice6_velocity[_edit_note_part] 
   LabelKnob VKNOB_VOICE6, (NoteName _n, YES), {:}, Round _v
   SetKnobValue VKNOB_VOICE6, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
@@ -1391,7 +1391,7 @@
   SetKnobValue VKNOB_RATCHET, (TranslateScale note_repeat[_edit_note_part], 1, 6, 0, 127)
 
   LabelKnob VKNOB_VELOCITY, {Velocity}
-  _vx = note_velocurve[_edit_note_part]
+  _vx = note_velocityX[_edit_note_part]
   if _vx = 1
     _vxknob = 64
   elseif _vx > 1
