@@ -41,25 +41,25 @@
   KNOB_MIDICH = 1
   
   // Knobs for voices
-  VKNOB_VOICE1 = 0
-  VKNOB_VOICE2 = 1
-  VKNOB_VOICE3 = 2
-  VKNOB_VOICE4 = 3
-  VKNOB_VOICE5 = 4
-  VKNOB_VOICE6 = 5
-  VKNOB_GATE = 11
-  VKNOB_VELOCITY = 12
-  VKNOB_PROBABILITY = 13
-  VKNOB_STRUM = 14
-  VKNOB_RATCHET = 15
-  VKNOB_SLOT1CC = 18
-  VKNOB_SLOT2CC = 19
-  VKNOB_SLOT3CC = 20
-  VKNOB_SLOT4CC = 21
-  VKNOB_SLOT1VAL = 7
-  VKNOB_SLOT2VAL = 8
-  VKNOB_SLOT3VAL = 9
-  VKNOB_SLOT4VAL = 10
+  // VKNOB_VOICE1 = 0
+  // VKNOB_VOICE2 = 1
+  // VKNOB_VOICE3 = 2
+  // VKNOB_VOICE4 = 3
+  // VKNOB_VOICE5 = 4
+  // VKNOB_VOICE6 = 5
+  // VKNOB_GATE = 11
+  // VKNOB_VELOCITY = 12
+  // VKNOB_PROBABILITY = 13
+  // VKNOB_STRUM = 14
+  // VKNOB_RATCHET = 15
+  // VKNOB_SLOT1CC = 18
+  // VKNOB_SLOT2CC = 19
+  // VKNOB_SLOT3CC = 20
+  // VKNOB_SLOT4CC = 21
+  // VKNOB_SLOT1VAL = 7
+  // VKNOB_SLOT2VAL = 8
+  // VKNOB_SLOT3VAL = 9
+  // VKNOB_SLOT4VAL = 10
 
   poly_offset = 0
   note_pos = 0
@@ -203,7 +203,7 @@
   for j = 1 to (Interpolate_steps - 1)
     _ival = _val + _increment * j
     SendMIDICC _ch, _cc, (Round _ival), (Round _delay * j)
-    Log {Scheduled }, _cc, {:}, (Round _ival), { at }, (Round _delay*j)
+//    Log {Scheduled }, _cc, {:}, (Round _ival), { at }, (Round _delay*j)
   endfor             
 @End
 
@@ -214,7 +214,7 @@
         _cc = pattern_CC_slot_map[_slot_base]
         _val = midi1_value[_note_part]
         SendMIDICC _ch, _cc, _val, 1
-        Log step, {:}, step_part, { CC },  _cc, {:}, _val
+//        Log step, {:}, step_part, { CC },  _cc, {:}, _val
 
         Interpolate_steps = CC_interpolation_steps[currentDivisor]
         if Interpolate_steps > 0
@@ -234,7 +234,7 @@
         _cc = pattern_CC_slot_map[_slot_base + 1]
         _val = midi2_value[_note_part]
         SendMIDICC _ch, _cc, midi2_value[_note_part], 2
-        Log step, {:}, step_part, { CC },  _cc, {:}, midi2_value[_note_part]
+//        Log step, {:}, step_part, { CC },  _cc, {:}, midi2_value[_note_part]
         Interpolate_steps = CC_interpolation_steps[currentDivisor]
         if Interpolate_steps > 0
           Interpolate_nextval = -1
@@ -253,7 +253,7 @@
         _cc = pattern_CC_slot_map[_slot_base + 2]
         _val = midi3_value[_note_part]
         SendMIDICC _ch, _cc, midi3_value[_note_part], 3 
-        Log step, {:}, step_part, { CC },  _cc, {:}, midi3_value[_note_part]
+//        Log step, {:}, step_part, { CC },  _cc, {:}, midi3_value[_note_part]
         Interpolate_steps = CC_interpolation_steps[currentDivisor]
         if Interpolate_steps > 0
           Interpolate_nextval = -1
@@ -272,7 +272,7 @@
         _cc = pattern_CC_slot_map[_slot_base + 3]
         _val = midi4_value[_note_part]      
         SendMIDICC _ch, _cc, midi4_value[_note_part], 4
-        Log step, {:}, step_part, { CC },  _cc, {:}, midi4_value[_note_part]
+//        Log step, {:}, step_part, { CC },  _cc, {:}, midi4_value[_note_part]
         Interpolate_steps = CC_interpolation_steps[currentDivisor]
         if Interpolate_steps > 0
           Interpolate_nextval = -1
@@ -299,15 +299,14 @@
         _gate = gate * (gateX[_note_part] / 100) + _noteDelay
         _vcurve = note_velocityX[_note_part]
         if _vcurve = -1 
-          _vcurve = pattern_velocurve[active_pattern]
+          _vcurve = pattern_velocurve[_pattern]
         endif
 
         _strum = note_strum[_note_part]
         if _strum = -1
           _strum = pattern_strum[active_pattern]
         endif
-        Log {Strum: }, _strum
-
+  
         if _polycount > 5
           _v = Clip voice6_velocity[_note_part] * _vcurve, 0, 127 
           _s = 5*_strum
@@ -345,7 +344,7 @@
           _rpttime = _gate / _rpts
           _rptdelay = _noteDelay
           for _i = 1 to _rpts
-            Log _i, {:}, _rpttime, {,}, _rptdelay
+//            Log _i, {:}, _rpttime, {,}, _rptdelay
             SendMIDINoteOn _ch, voice1[_note_part] + _transposeNote, _v, _rptdelay      
             SendMIDINoteOff _ch, voice1[_note_part] + _transposeNote, 0, _rpttime
             _rptdelay = _rptdelay + _rpttime          
@@ -641,7 +640,7 @@
 
   midicount[_note_part] = _midicount
 
-  Log {Recorded midi, CC: }, _cc, {:}, _val, { -> offset: }, _midi_offset, {)},{ part:}, _note_part
+//  Log {Recorded midi, CC: }, _cc, {:}, _val, { -> offset: }, _midi_offset, {)},{ part:}, _note_part
 @End
 
 
@@ -942,25 +941,25 @@
     polycount[_part] = _voice
   endif
   
-  if LastKnob = VKNOB_VOICE1
+  if LastKnob = 0
     voice1[_part] = _value
-    LabelKnob VKNOB_VOICE1, (NoteName _value, YES)
-  elseif LastKnob = VKNOB_VOICE2
+    LabelKnob 0, (NoteName _value, YES)
+  elseif LastKnob = 1
     voice2[_part] = _value
-    LabelKnob VKNOB_VOICE2, (NoteName _value, YES)
-  elseif LastKnob = VKNOB_VOICE3
+    LabelKnob 1, (NoteName _value, YES)
+  elseif LastKnob = 2
     voice3[_part] = _value
-    LabelKnob VKNOB_VOICE3, (NoteName _value, YES)
-  elseif LastKnob = VKNOB_VOICE4
+    LabelKnob 2, (NoteName _value, YES)
+  elseif LastKnob = 3
     voice4[_part] = _value
-    LabelKnob VKNOB_VOICE4, (NoteName _value, YES)
-  elseif LastKnob = VKNOB_VOICE5
+    LabelKnob 3, (NoteName _value, YES)
+  elseif LastKnob = 4
     voice5[_part] = _value
-    LabelKnob VKNOB_VOICE5, (NoteName _value, YES)
-  elseif LastKnob = VKNOB_VOICE6
+    LabelKnob 4, (NoteName _value, YES)
+  elseif LastKnob = 5
     voice6[_part] = _value
-    LabelKnob VKNOB_VOICE6, (NoteName _value, YES)
-  elseif LastKnob = VKNOB_GATE  // gate. knob is mapped linearly from 0-100% for the first 1/4 of the slider, then from 100-1600 for the "upper" 75%.
+    LabelKnob 5, (NoteName _value, YES)
+  elseif LastKnob = 11  // gate. knob is mapped linearly from 0-100% for the first 1/4 of the slider, then from 100-1600 for the "upper" 75%.
     _ntx = _value
     if _ntx <= 32
       _ntx = Round(_ntx * 3.125)
@@ -970,17 +969,17 @@
     gateX[_part] = _ntx
     LabelKnobs _ntx, {%}
     
-  elseif LastKnob = VKNOB_PROBABILITY 
+  elseif LastKnob = 13 
     _p = Round(_value / 127 * 100)
     note_probability[_part] = _p
     LabelKnobs _p, {%}
   
-  elseif LastKnob = VKNOB_RATCHET
+  elseif LastKnob = 15
     _rpts = (Round (TranslateScale _value, 1, 127, 1, 6))
     note_repeat[_part] = _rpts
     LabelKnobs _rpts 
 
-  elseif LastKnob = VKNOB_VELOCITY 
+  elseif LastKnob = 12 
     _vxknob = _value
     if _vxknob = 0
       _vx = -1
@@ -1025,54 +1024,54 @@
     _v = Clip voice6_velocity[_part] * _vcurve, 0, 127 
     LabelKnob 5, (NoteName _n, YES), {:}, Round _v
 
-  elseif LastKnob = VKNOB_STRUM
+  elseif LastKnob = 14
       _value = TranslateScale _value, 0, 127, 0, 200
       note_strum[_part] = _value
       LabelKnobs (Round _value), {ms}
 
-  elseif LastKnob = VKNOB_SLOT1CC
+  elseif LastKnob = 18
     _value = Round _value
     pattern_CC_slot_map[active_pattern * midi_slots] = _value
-    LabelKnob VKNOB_SLOT1CC, {A:CC }, _value
+    LabelKnob 18, {A:CC }, _value
     LabelKnobs {CC}, _value, {⚠️ Affects whole pattern! ⚠️}
 
-  elseif LastKnob = VKNOB_SLOT1VAL
+  elseif LastKnob = 7
     _value = Round _value
     midi1_value[_part] = _value
-    LabelKnob VKNOB_SLOT1VAL, {A: }, _value
+    LabelKnob 7, {A: }, _value
     
-  elseif LastKnob = VKNOB_SLOT2CC
+  elseif LastKnob = 19
     _value = Round _value
     pattern_CC_slot_map[active_pattern * midi_slots +1] = _value
-    LabelKnob VKNOB_SLOT2CC, {B:CC }, _value
+    LabelKnob 19, {B:CC }, _value
     LabelKnobs {CC}, _value, {⚠️ Affects whole pattern! ⚠️}
 
-  elseif LastKnob = VKNOB_SLOT2VAL
+  elseif LastKnob = 8
     _value = Round _value
     midi2_value[_part] = _value
-    LabelKnob VKNOB_SLOT2VAL, {B: }, _value
+    LabelKnob 8, {B: }, _value
 
-  elseif LastKnob = VKNOB_SLOT3CC
+  elseif LastKnob = 20
     _value = Round _value
     pattern_CC_slot_map[active_pattern * midi_slots +2] = _value
-    LabelKnob VKNOB_SLOT3CC, {C:CC }, _value
+    LabelKnob 20, {C:CC }, _value
     LabelKnobs {CC}, _value, {⚠️ Affects whole pattern! ⚠️}
 
-  elseif LastKnob = VKNOB_SLOT3VAL
+  elseif LastKnob = 9
     _value = Round _value
     midi3_value[_part] = _value
-    LabelKnob VKNOB_SLOT3VAL, {C: }, _value
+    LabelKnob 9, {C: }, _value
 
-  elseif LastKnob = VKNOB_SLOT4CC
+  elseif LastKnob = 21
     _value = Round _value
     pattern_CC_slot_map[active_pattern * midi_slots +3] = _value
-    LabelKnob VKNOB_SLOT4CC, {D:CC }, _value
+    LabelKnob 21, {D:CC }, _value
     LabelKnobs {CC}, _value, {⚠️ Affects whole pattern! ⚠️}
 
-  elseif LastKnob = VKNOB_SLOT4VAL
+  elseif LastKnob = 10
     _value = Round _value
     midi4_value[_part] = _value
-    LabelKnob VKNOB_SLOT4VAL, {D: }, _value
+    LabelKnob 10, {D: }, _value
   endif
 
 @End
@@ -1118,7 +1117,7 @@
     endif
     if gateX_knob > 0 and mode_pad_edit = 1    // REFACTOR: use pad_edit_note_part below (and in other similar places)
       gateX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = gateX_knob
-      Log {Recording gate change for }, pad_edit_step, {:}, pad_edit_part
+//      Log {Recording gate change for }, pad_edit_step, {:}, pad_edit_part
     elseif gateX_knob > 0 and midi_rec_mode <> MIDI_REC_OFF
     // Record knob movement - to *next* part as the current has already sent its midi notes. 
       _np = (note_part + 1) % sizeof_pattern 
@@ -1347,50 +1346,50 @@
   _n1 = _n
   _v = voice1_velocity[_edit_note_part] 
 
-  LabelKnob VKNOB_VOICE1, (NoteName _n, YES), {:}, Round _v
-  SetKnobValue VKNOB_VOICE1, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+  LabelKnob 0, (NoteName _n, YES), {:}, Round _v
+  SetKnobValue 0, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice2[_edit_note_part]
   _v = voice2_velocity[_edit_note_part] 
-  LabelKnob VKNOB_VOICE2, (NoteName _n, YES), {:}, Round _v
-  SetKnobValue VKNOB_VOICE2, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+  LabelKnob 1, (NoteName _n, YES), {:}, Round _v
+  SetKnobValue 1, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice3[_edit_note_part]
   _v = voice3_velocity[_edit_note_part] 
-  LabelKnob VKNOB_VOICE3, (NoteName _n, YES), {:}, Round _v
-  SetKnobValue VKNOB_VOICE3, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+  LabelKnob 2, (NoteName _n, YES), {:}, Round _v
+  SetKnobValue 2, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice4[_edit_note_part]
   _v = voice4_velocity[_edit_note_part] 
-  LabelKnob VKNOB_VOICE4, (NoteName _n, YES), {:}, Round _v
-  SetKnobValue VKNOB_VOICE4, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+  LabelKnob 3, (NoteName _n, YES), {:}, Round _v
+  SetKnobValue 3, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice5[_edit_note_part]
   _v = voice5_velocity[_edit_note_part] 
-  LabelKnob VKNOB_VOICE5, (NoteName _n, YES), {:}, Round _v
-  SetKnobValue VKNOB_VOICE5, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+  LabelKnob 4, (NoteName _n, YES), {:}, Round _v
+  SetKnobValue 4, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
   _n = voice6[_edit_note_part]
   _v = voice6_velocity[_edit_note_part] 
-  LabelKnob VKNOB_VOICE6, (NoteName _n, YES), {:}, Round _v
-  SetKnobValue VKNOB_VOICE6, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
+  LabelKnob 5, (NoteName _n, YES), {:}, Round _v
+  SetKnobValue 5, (TranslateScale _n, _n1-24, _n1+24, 0, 127) 
 
-  LabelKnob VKNOB_GATE, {Gate}
+  LabelKnob 11, {Gate}
   _ntx = gateX[_edit_note_part]
   if _ntx <= 100
     _ntx = Round _ntx / 3.125
   else
     _ntx = Round ((((_ntx - 100) / 1500) * 95) + 32)
   endif
-  SetKnobValue VKNOB_GATE, _ntx
+  SetKnobValue 11, _ntx
 
-  LabelKnob VKNOB_PROBABILITY, {Probability}
-  SetKnobValue VKNOB_PROBABILITY, (TranslateScale note_probability[_edit_note_part], 0, 100, 0, 127)
+  LabelKnob 13, {Probability}
+  SetKnobValue 13, (TranslateScale note_probability[_edit_note_part], 0, 100, 0, 127)
 
-  LabelKnob VKNOB_RATCHET, {Ratchet}
-  SetKnobValue VKNOB_RATCHET, (TranslateScale note_repeat[_edit_note_part], 1, 6, 0, 127)
+  LabelKnob 15, {Ratchet}
+  SetKnobValue 15, (TranslateScale note_repeat[_edit_note_part], 1, 6, 0, 127)
 
-  LabelKnob VKNOB_VELOCITY, {Velocity}
+  LabelKnob 12, {Velocity}
   _vx = note_velocityX[_edit_note_part]
   if _vx = 1
     _vxknob = 64
@@ -1399,31 +1398,31 @@
   elseif _vx < 1
     _vxknob = TranslateScale _vx, 0, 1, 0, 60
   endif
-  SetKnobValue VKNOB_VELOCITY, _vxknob
+  SetKnobValue 12, _vxknob
  
-  LabelKnob VKNOB_STRUM, {Strum}
-  SetKnobValue VKNOB_STRUM, (TranslateScale pattern_strum[active_pattern], 0, 200, 0, 127) 
+  LabelKnob 14, {Strum}
+  SetKnobValue 14, (TranslateScale pattern_strum[active_pattern], 0, 200, 0, 127) 
  
-  LabelKnob VKNOB_SLOT1CC, {A:CC }, pattern_CC_slot_map[active_pattern*midi_slots]
-  SetKnobValue VKNOB_SLOT1CC, pattern_CC_slot_map[active_pattern*midi_slots]
-  LabelKnob VKNOB_SLOT2CC, {B:CC }, pattern_CC_slot_map[active_pattern*midi_slots +1]
-  SetKnobValue VKNOB_SLOT2CC, pattern_CC_slot_map[active_pattern*midi_slots + 1]
-  LabelKnob VKNOB_SLOT3CC, {C:CC }, pattern_CC_slot_map[active_pattern*midi_slots+2]
-  SetKnobValue VKNOB_SLOT3CC, pattern_CC_slot_map[active_pattern*midi_slots + 2]
-  LabelKnob VKNOB_SLOT4CC, {D:CC }, pattern_CC_slot_map[active_pattern*midi_slots+3]
-  SetKnobValue VKNOB_SLOT4CC, pattern_CC_slot_map[active_pattern*midi_slots + 3]
+  LabelKnob 18, {A:CC }, pattern_CC_slot_map[active_pattern*midi_slots]
+  SetKnobValue 18, pattern_CC_slot_map[active_pattern*midi_slots]
+  LabelKnob 19, {B:CC }, pattern_CC_slot_map[active_pattern*midi_slots +1]
+  SetKnobValue 19, pattern_CC_slot_map[active_pattern*midi_slots + 1]
+  LabelKnob 20, {C:CC }, pattern_CC_slot_map[active_pattern*midi_slots+2]
+  SetKnobValue 20, pattern_CC_slot_map[active_pattern*midi_slots + 2]
+  LabelKnob 21, {D:CC }, pattern_CC_slot_map[active_pattern*midi_slots+3]
+  SetKnobValue 21, pattern_CC_slot_map[active_pattern*midi_slots + 3]
 
-  LabelKnob VKNOB_SLOT1VAL, {A: }, midi1_value[_edit_note_part]
-  SetKnobValue VKNOB_SLOT1VAL, midi1_value[_edit_note_part]
+  LabelKnob 7, {A: }, midi1_value[_edit_note_part]
+  SetKnobValue 7, midi1_value[_edit_note_part]
 
-  LabelKnob VKNOB_SLOT2VAL, {B: }, midi2_value[_edit_note_part]
-  SetKnobValue VKNOB_SLOT2VAL, midi2_value[_edit_note_part]
+  LabelKnob 8, {B: }, midi2_value[_edit_note_part]
+  SetKnobValue 8, midi2_value[_edit_note_part]
 
-  LabelKnob VKNOB_SLOT3VAL, {C: }, midi3_value[_edit_note_part]
-  SetKnobValue VKNOB_SLOT3VAL, midi3_value[_edit_note_part]
+  LabelKnob 9, {C: }, midi3_value[_edit_note_part]
+  SetKnobValue 9, midi3_value[_edit_note_part]
 
-  LabelKnob VKNOB_SLOT4VAL, {D: }, midi4_value[_edit_note_part]
-  SetKnobValue VKNOB_SLOT4VAL, midi4_value[_edit_note_part]
+  LabelKnob 10, {D: }, midi4_value[_edit_note_part]
+  SetKnobValue 10, midi4_value[_edit_note_part]
 
   LabelKnobs {⚠️ Voices for }, pad_edit_step, {:} , pad_edit_part, {  ⬆️ SHIFT to go back }
   LabelKnob 6, { }
