@@ -1775,7 +1775,7 @@
 // <<<<<<<<< end of Pad Manager script code >>>>>
 
 @Description
-  FLOW - 7-pattern, multi-channel, 16x8 step midi looper & sequencer for Mozaic by peblin.
+  FLOW 2.0 - 7-pattern, multi-channel, 16x8 step midi looper & sequencer for Mozaic by peblin.
   Featuring:
 
   - 16 steps with 8 subdivisions (parts) each
@@ -1783,11 +1783,13 @@
   - 7 patterns, with midi channel configurable per pattern
   - From 1/32 to 2 bar step length giving 1/2 to 16 bar patterns
   - Live & step recording
-  - Midi CC recording & automation
+  - CC recording & automation with interpolation of CC values between parts
+  - Ratcheting / note repetition
+  - Strumming mode for chords
+  - Transpose mode
   - Live recording stores note duration and timing for (almost) exact playback
   - Individual step / part editing, including voices, probability and duration
   - Note probability & duration can be set per part
-  - Transpose mode
   - Patterns play solo or multi - easily toggle patterns ON/OFF for live performance
   - 3 quantization modes for live recording - None (as played), per part, per step
 
@@ -1839,22 +1841,6 @@ Drag faders to adjust notes. If you drag a previously unused voice it'll be adde
 
 It's not super-easy to hit the right note when dragging the fader - suggestions for improved UX welcome.
 
--- Ratcheting --
-
-In part edit mode, you can set ratcheting from 1-6. Ratcheting splits a note into 1 to 6 smaller notes, triggering over the same gate duration as the original note. So, with ratcheting set to 3 and gate at 100% you will get one note at start part, one at 1/3 of the step length and one at 2/3 of step length.
-
-By experimenting with gate length it's very easy to make ratcheting "humanized" to create more varied fills. At the extreme, with gate length at 1600% and ratcheting set to 6 the note will trigger 6 times over the full sequencer cycle - perfect for weird ghost notes :)
-
--- Strumming --
-
-You can set strum in milliseconds per pattern and/or per part (in both step and part edit modes). 
-
-Voice playback will be strummed by delaying each voice with the strum amount multiplied with voice number (starting with 0). So, a strum value of 10ms will play voice0 at time 0, voice1 10ms later, voice2 20ms later and so on. 
-
-By recording chords “in reverse”, ie highest note first, you can simulate both up and down strums as if it were a guitar. Strumming can also be used creatively with drums if several drum hits are on the same part - by setting the strum value they’ll be slightly separated, for a more humanized feel.
-
-When sequencer has CC rec enabled, changes to strum will be saved live as the sequencer plays. 
-
 -- Gate --
 
 The knob "gate" sets the default gate length both for live and step recording. Gate length is measured as "percentage of step length". Thus, a gate of 200% with the sequencer set to "1/8" will give 1/4th notes. This also means that if you change step length for the sequencer, the gate length will scale accordingly.
@@ -1876,6 +1862,22 @@ The "Velocity" knob sets the default velocity scale factor when recording. Veloc
 Velocity scale factor is set from 0% (mute) to 1000% and will be multiplied with the recorded velocity on playback.
 
 When sequencer has CC rec enabled, changes to velocity scale factor will be saved live as the sequencer plays.
+
+-- Ratcheting --
+
+In part edit mode, you can set ratcheting from 1-6. Ratcheting splits a note into 1 to 6 smaller notes, triggering over the same gate duration as the original note. So, with ratcheting set to 3 and gate at 100% you will get one note at start part, one at 1/3 of the step length and one at 2/3 of step length.
+
+By experimenting with gate length it's very easy to make ratcheting "humanized" to create more varied fills. At the extreme, with gate length at 1600% and ratcheting set to 6 the note will trigger 6 times over the full sequencer cycle - perfect for weird ghost notes :)
+
+-- Strumming --
+
+You can set strum in milliseconds per pattern and/or per part (in both step and part edit modes). 
+
+Voice playback will be strummed by delaying each voice with the strum amount multiplied with voice number (starting with 0). So, a strum value of 10ms will play voice0 at time 0, voice1 10ms later, voice2 20ms later and so on. 
+
+By recording chords “in reverse”, ie highest note first, you can simulate both up and down strums as if it were a guitar. Strumming can also be used creatively with drums if several drum hits are on the same part - by setting the strum value they’ll be slightly separated, for a more humanized feel.
+
+When sequencer has CC rec enabled, changes to strum will be saved live as the sequencer plays. 
 
 -- Pattern Midi Channel --
 
@@ -1907,12 +1909,14 @@ In OVERDUB mode, incoming CC values are stored "as is" per part in the sequencer
 
 Flow has 4 "CC slots" and can store values for up to 4 different CCs per pattern. Slots are allocated on a first come basis - so if the sequencer receives sustain, mod wheel, cutoff and resonance CCs the slots for the active pattern are full and additional CC commands will be passed thru but not stored.
 
---- CC playback ---
+TIP: Recorded CC commands and values can be seen and changed in the "part edit mode" where you'll find knobs for all 4 slots (labeled A-D). 
+⚠️ Note that if you change the CC#, it'll change the CC for that slot for the whole pattern as slots are "pattern level". The value is of course per part, so no risk in changing that.
+
+--- CC playback and interpolation ---
 
 For patterns with step length less than 1/4, playback of recorded CCs is quantized to the last recorded CC value of each part. 
 
 For patterns with longer steps - from 1/4 to 2 bars - Flow will interpolate CC values to "smooth" the sampled CC values. The amount of extra/interpolated values varies depending on step length - from 1 extra for 1/4th notes to 15 extra for 2 bar notes. This is very useful for long, evolving pads. 🌊
-
 
 -- Transpose mode --
 
@@ -1933,6 +1937,7 @@ To copy a pattern, first make sure it's the armed pattern then press "Copy Patte
 
   Inspired by OP-Z and https://patchstorage.com/infinity
   Thanks to -ki for https://patchstorage.com/pad-manager-include and great contributions to the community
+  Thanks to all members of the Audiobus Forum for inspiration and good feedback on Flow.
 
   And most of all thanks to Bram Bos for creating one of the most game-changing iOS music apps ever.
 
