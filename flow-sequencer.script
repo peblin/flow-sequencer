@@ -791,7 +791,7 @@ Log {Hej }, nn
       trig_hold = YES
       resetStepOnNewStep = 1  // REFACTOR: Use only reset_step
       reset_step = pad
-    elseif
+    else
       pad_edit_step = pad
       mode_pad_edit = 1
       pad_edit_part = 0 
