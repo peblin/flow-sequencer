@@ -2,6 +2,14 @@
 // - Hold SHIFT for more pattern options
 // - New recording mode - record last played note when tapping a step (or tap part when holding a step)
 // - Rec mode knob that gives direct control of various rec/play modes.
+// - Trigger mode to set sequencer position
+//   - In trigger mode, hold pad to repeat it until released
+// - CC automation slots A to D mapped to AU parameters "User 0" to "User 3"
+//   - Map knobs for Flow in e.g. Velocity Keyboard, set Midi Control in AUM. Then configure per pattern which midi CC each slot maps to.
+// - Midi CC 115-118 maps to slots A to D, for use in the same way as AU parameters
+
+// TODO:
+// - Document what labels on pads actually mean
 
 @Onload
   SetShortName {Flow} 
@@ -25,7 +33,7 @@
 
   // Buttons
   BTN_MULTI_PATTERN = 0
-  BTN_RECORD = 1
+  a_RECORD = 1
   BTN_MIDI = 2
   BTN_QUANTIZE = 3
   BTN_TRANSPOSE = 4
@@ -167,7 +175,9 @@
   if tickCounter >= countPerStep
     tickCounter = 0
     if resetStepOnNewStep = 1
-      resetStepOnNewStep = 0
+      if trig_hold = NO
+        resetStepOnNewStep = 0
+      endif
       seq_step = reset_step
     else
       Inc seq_step
@@ -304,67 +314,67 @@
 @End
 
 @OnMetroPulse_notes
-        _transposeNote = 0
-        if transpose 
-          _transposeNote = transposeNote
-        endif
+  _transposeNote = 0
+  if transpose 
+    _transposeNote = transposeNote
+  endif
 
-        _polycount = polycount[_note_part]
-        _noteDelay = noteOnDelayTicks[_note_part] * timer_tick_resolution
-        _gate = gate * (gateX[_note_part] / 100) + _noteDelay
-        _vcurve = note_velocityX[_note_part]
-        if _vcurve = -1 
-          _vcurve = pattern_velocurve[_pattern]
-        endif
+  _polycount = polycount[_note_part]
+  _noteDelay = noteOnDelayTicks[_note_part] * timer_tick_resolution
+  _gate = gate * (gateX[_note_part] / 100) + _noteDelay
+  _vcurve = note_velocityX[_note_part]
+  if _vcurve = -1 
+    _vcurve = pattern_velocurve[_pattern]
+  endif
 
-        _strum = note_strum[_note_part]
-        if _strum = -1
-          _strum = pattern_strum[active_pattern]
-        endif
-  
-        if _polycount > 5
-          _v = Clip voice6_velocity[_note_part] * _vcurve, 0, 127 
-          _s = 5*_strum
-          SendMIDINoteOn _ch, voice6[_note_part] + _transposeNote, _v, _noteDelay + _s
-          SendMIDINoteOff _ch, voice6[_note_part] + _transposeNote, 0, _gate + _s
-        endif
-        if _polycount > 4
-          _v = Clip voice5_velocity[_note_part] * _vcurve, 0, 127 
-          _s = 4*_strum
-          SendMIDINoteOn _ch, voice5[_note_part] + _transposeNote, _v, 
-          _noteDelay + _s
-          SendMIDINoteOff _ch, voice5[_note_part] + _transposeNote, 0, _gate + _s
-        endif
-        if _polycount > 3
-          _v = Clip voice4_velocity[_note_part] * _vcurve, 0, 127 
-          _s = 3*_strum
-          SendMIDINoteOn _ch, voice4[_note_part] + _transposeNote, _v, _noteDelay + _s
-          SendMIDINoteOff _ch, voice4[_note_part] + _transposeNote, 0, _gate + _s
-        endif
-        if _polycount > 2
-          _v = Clip voice3_velocity[_note_part] * _vcurve, 0, 127 
-          _s = 2*_strum
-          SendMIDINoteOn _ch, voice3[_note_part] + _transposeNote, _v, _noteDelay + _s
-          SendMIDINoteOff _ch, voice3[_note_part] + _transposeNote, 0, _gate + _s
-        endif
-        if _polycount > 1
-          _v = Clip voice2_velocity[_note_part] * _vcurve, 0, 127 
-          _s = 1*_strum
-          SendMIDINoteOn _ch, voice2[_note_part] + _transposeNote, _v, _noteDelay + _s
-          SendMIDINoteOff _ch, voice2[_note_part] + _transposeNote, 0, _gate + _s
-        endif
-        if _polycount > 0
-          _v = Clip voice1_velocity[_note_part] * _vcurve, 0, 127 
-          _rpts = note_repeat[_note_part]
-          _rpttime = _gate / _rpts
-          _rptdelay = _noteDelay
-          for _i = 1 to _rpts
+  _strum = note_strum[_note_part]
+  if _strum = -1
+    _strum = pattern_strum[active_pattern]
+  endif
+
+  if _polycount > 5
+    _v = Clip voice6_velocity[_note_part] * _vcurve, 0, 127 
+    _s = 5*_strum
+    SendMIDINoteOn _ch, voice6[_note_part] + _transposeNote, _v, _noteDelay + _s
+    SendMIDINoteOff _ch, voice6[_note_part] + _transposeNote, 0, _gate + _s
+  endif
+  if _polycount > 4
+    _v = Clip voice5_velocity[_note_part] * _vcurve, 0, 127 
+    _s = 4*_strum
+    SendMIDINoteOn _ch, voice5[_note_part] + _transposeNote, _v, 
+    _noteDelay + _s
+    SendMIDINoteOff _ch, voice5[_note_part] + _transposeNote, 0, _gate + _s
+  endif
+  if _polycount > 3
+    _v = Clip voice4_velocity[_note_part] * _vcurve, 0, 127 
+    _s = 3*_strum
+    SendMIDINoteOn _ch, voice4[_note_part] + _transposeNote, _v, _noteDelay + _s
+    SendMIDINoteOff _ch, voice4[_note_part] + _transposeNote, 0, _gate + _s
+  endif
+  if _polycount > 2
+    _v = Clip voice3_velocity[_note_part] * _vcurve, 0, 127 
+    _s = 2*_strum
+    SendMIDINoteOn _ch, voice3[_note_part] + _transposeNote, _v, _noteDelay + _s
+    SendMIDINoteOff _ch, voice3[_note_part] + _transposeNote, 0, _gate + _s
+  endif
+  if _polycount > 1
+    _v = Clip voice2_velocity[_note_part] * _vcurve, 0, 127 
+    _s = 1*_strum
+    SendMIDINoteOn _ch, voice2[_note_part] + _transposeNote, _v, _noteDelay + _s
+    SendMIDINoteOff _ch, voice2[_note_part] + _transposeNote, 0, _gate + _s
+  endif
+  if _polycount > 0
+    _v = Clip voice1_velocity[_note_part] * _vcurve, 0, 127 
+    _rpts = note_repeat[_note_part]
+    _rpttime = _gate / _rpts
+    _rptdelay = _noteDelay
+    for _i = 1 to _rpts
 //            Log _i, {:}, _rpttime, {,}, _rptdelay
-            SendMIDINoteOn _ch, voice1[_note_part] + _transposeNote, _v, _rptdelay      
-            SendMIDINoteOff _ch, voice1[_note_part] + _transposeNote, 0, _rpttime
-            _rptdelay = _rptdelay + _rpttime          
-          endfor
-        endif
+      SendMIDINoteOn _ch, voice1[_note_part] + _transposeNote, _v, _rptdelay      
+      SendMIDINoteOff _ch, voice1[_note_part] + _transposeNote, 0, _rpttime
+      _rptdelay = _rptdelay + _rpttime          
+    endfor
+  endif
 @End
 
 @OnMetroPulse   
@@ -581,14 +591,62 @@ Log {Hej }, nn
 
 // REFACTOR: Uses _note_part, which is not defined here. 
 @OnMidiCC
-  _cc = MIDIByte2
-  _val = MIDIByte3
-
   if not ((record and HostRunning) or mode_pad_edit = 1) or (uiMode = UIMODE_BUTTONS)  or transpose or midi_rec_mode = MIDI_REC_OFF
     SendMidiThruOnCh pattern_midich[active_pattern]
     Exit
   endif
-   
+
+  _cc = MIDIByte2
+  _val = MIDIByte3
+
+  // hardcoded midi CC map. not the prettiest, but collisions unlikely and easy to fix.
+  if _cc >= 115 and _cc <= 118
+    if _cc = 115
+      _midi_offset = 0
+    elseif _cc = 116
+      _midi_offset = 1
+    elseif _cc = 117
+      _midi_offset = 2
+    elseif _cc = 118
+      _midi_offset = 3
+    endif
+    _slot_base = active_pattern * midi_slots
+    _cc = pattern_CC_slot_map[_slot_base]
+  else
+    _midi_offset = -1
+    _slot_base = active_pattern * midi_slots
+    if pattern_CC_slot_map[_slot_base] = _cc
+      _midi_offset = 0
+    elseif pattern_CC_slot_map[_slot_base + 1] = _cc
+      _midi_offset = 1
+    elseif pattern_CC_slot_map[_slot_base + 2] = _cc
+      _midi_offset = 2
+    elseif pattern_CC_slot_map[_slot_base + 3] = _cc
+      _midi_offset = 3
+    endif
+
+    if _midi_offset = -1
+      if pattern_CC_slot_map[_slot_base] = -1
+        _midi_offset = 0
+      elseif pattern_CC_slot_map[_slot_base + 1] = -1
+        _midi_offset = 1
+      elseif pattern_CC_slot_map[_slot_base + 2] = -1
+        _midi_offset = 2
+      elseif pattern_CC_slot_map[_slot_base + 3] = -1
+        _midi_offset = 3
+      else
+        Log {OUT OF SLOTS! Not recording: }, _cc, {:}, _val
+        Exit
+      endif  
+      pattern_CC_slot_map[_slot_base + _midi_offset] = _cc
+    endif
+  endif
+
+  call @RecordMidiCC
+@End
+
+// inputs: _midi_offset, _cc, _val, _slot_base
+@RecordMidiCC   
   _supressMidiThru = NO
  
   if mode_pad_edit = 1
@@ -605,34 +663,6 @@ Log {Hej }, nn
 
   if not _supressMidiThru
     SendMidiThruOnCh pattern_midich[active_pattern]
-  endif
-
-  _midi_offset = -1
-  _slot_base = active_pattern * midi_slots
-  if pattern_CC_slot_map[_slot_base] = _cc
-    _midi_offset = 0
-  elseif pattern_CC_slot_map[_slot_base + 1] = _cc
-    _midi_offset = 1
-  elseif pattern_CC_slot_map[_slot_base + 2] = _cc
-    _midi_offset = 2
-  elseif pattern_CC_slot_map[_slot_base + 3] = _cc
-    _midi_offset = 3
-  endif
-
-  if _midi_offset = -1
-    if pattern_CC_slot_map[_slot_base] = -1
-      _midi_offset = 0
-    elseif pattern_CC_slot_map[_slot_base + 1] = -1
-      _midi_offset = 1
-    elseif pattern_CC_slot_map[_slot_base + 2] = -1
-      _midi_offset = 2
-    elseif pattern_CC_slot_map[_slot_base + 3] = -1
-      _midi_offset = 3
-    else
-      Log {OUT OF SLOTS! Not recording: }, _cc, {:}, _val
-      Exit
-    endif  
-    pattern_CC_slot_map[_slot_base + _midi_offset] = _cc
   endif
 
   if midi_rec_mode = MIDI_REC_WRITE and midi_write_last_step <> _step
@@ -677,6 +707,34 @@ Log {Hej }, nn
   midicount[_note_part] = _midicount
 
 //  Log {Recorded midi, CC: }, _cc, {:}, _val, { -> offset: }, _midi_offset, {)},{ part:}, _note_part
+@End
+
+@OnAUParameter
+  // inputs: _midi_offset, _cc, _val, _slot_base
+  if not ((record and HostRunning) or mode_pad_edit = 1) or (uiMode = UIMODE_BUTTONS)  or transpose or midi_rec_mode = MIDI_REC_OFF
+    SendMidiThruOnCh pattern_midich[active_pattern]
+    Exit
+  endif
+
+  _slot_base = active_pattern * midi_slots
+  _val = GetAUParameter LastAUParameter
+  if LastAUParameter = 0
+    _midi_offset = 0
+    _cc = pattern_CC_slot_map[_slot_base]
+  elseif LastAUParameter = 1
+    _midi_offset = 1
+    _cc = pattern_CC_slot_map[_slot_base+1]
+  elseif LastAUParameter = 2
+    _midi_offset = 2
+    _cc = pattern_CC_slot_map[_slot_base+2]
+  elseif LastAUParameter = 3
+    _midi_offset = 3
+    _cc = pattern_CC_slot_map[_slot_base+3]
+  endif
+
+  Log {AU Parameter: }, LastAUParameter, { value: }, (GetAUParameter LastAUParameter), { _midi_offset: }, _midi_offset, { cc: }, _cc
+
+  call @RecordMidiCC
 @End
 
 
@@ -729,18 +787,24 @@ Log {Hej }, nn
 
 @OnPadHold
   if uiMode = UIMODE_PADS
-    pad_edit_step = pad
-    mode_pad_edit = 1
-    pad_edit_part = 0 
-    if pad < 8
-      pad_edit_part_pad = 8  // used for latching pad in UI. "hold to edit" always edits first part of step
-    else
-      pad_edit_part_pad = 0
+    if rec_mode = 3
+      trig_hold = YES
+      resetStepOnNewStep = 1  // REFACTOR: Use only reset_step
+      reset_step = pad
+    elseif
+      pad_edit_step = pad
+      mode_pad_edit = 1
+      pad_edit_part = 0 
+      if pad < 8
+        pad_edit_part_pad = 8  // used for latching pad in UI. "hold to edit" always edits first part of step
+      else
+        pad_edit_part_pad = 0
+      endif
+      pad_edit_got_note = NO
+      pad_edit_hold = 1
+      LabelPad pad, {Editing...} 
+      Call @UpdateGUI
     endif
-    pad_edit_got_note = NO
-    pad_edit_hold = 1
-    LabelPad pad, {Editing...} 
-    Call @UpdateGUI
   elseif uiMode = UIMODE_BUTTONS
     if pad = BTN_CLEAR_ALL
       LabelPad BTN_CLEAR_ALL, {✅Cleared}
@@ -1204,7 +1268,7 @@ Log {Hej }, nn
       gateX[(active_pattern * sizeof_pattern) + _np] = gateX_knob
     endif
 
-  elseif LastKnob = 100 // won't trigger - KNOB_PROBABILITY
+  elseif LastKnob = 100 // wont trigger - KNOB_PROBABILITY
     _probability = (GetKnobValue KNOB_PROBABILITY) / 127 * 100
     if mode_pad_edit = 1
       note_probability[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _probability
@@ -1546,9 +1610,8 @@ Log {Hej }, nn
     
     if _pc > 0
       LatchPad _step, 1
-      // Row below triggers parser bug in Mozaic if there are spaces after commas
       if _mc > 0
-        LabelPad _step,{A},polycount[_po+0],polycount[_po+1],polycount[_po+2],polycount[_po+3],polycount[_po+4],polycount[_po+5],polycount[_po+6],polycount[_po+7]
+        LabelPad _step,polycount[_po+0],polycount[_po+1],polycount[_po+2],polycount[_po+3],polycount[_po+4],polycount[_po+5],polycount[_po+6],polycount[_po+7], { A}
       else
         LabelPad _step,polycount[_po+0],polycount[_po+1],polycount[_po+2],polycount[_po+3],polycount[_po+4],polycount[_po+5],polycount[_po+6],polycount[_po+7]
       endif
@@ -1851,6 +1914,9 @@ Log {Hej }, nn
   if padTaps[LastPad] = 1 and padTicks[LastPad] < padAnalyseTicks
     padHold[LastPad] = YES
   endif
+  
+  resetStepOnNewStep = NO
+  trig_hold = NO // always reset even though we're rarely in this mode. It's just cheaper code this way.
 
   if pad_edit_hold and LastPad = pad_edit_step
     pad_edit_got_note = NO
