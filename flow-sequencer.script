@@ -1,3 +1,8 @@
+// Changelog:
+// - Hold SHIFT for more pattern options
+// - New recording mode - record last played note when tapping a step (or tap part when holding a step)
+// - Rec mode knob that gives direct control of various rec/play modes.
+
 @Onload
   SetShortName {Flow} 
   ShowLayout 2
@@ -13,7 +18,6 @@
   sizeof_pattern = 16*8      // Size of storing all step parts in an array
 
   // -- CONSTANTS -- 
-
   UIMODE_PADS = 1
   UIMODE_BUTTONS = 2
   UIMODE_VOICES = 3
@@ -34,6 +38,7 @@
   KNOB_GATE = 0
   KNOB_VELOCITY = 1
   KNOB_PROBABILITY = 2
+  KNOB_RECMODE = 2
   KNOB_STRUM = 3
  
   // Knobs for pattern
@@ -86,6 +91,14 @@
   clear_confirm = NO
   if Unassigned record
     record = 1 // Rec enabled by default
+    // rec_modes: (TBD)
+    // 0 - off
+    // 1 - live
+    // 2 - tap to add last received note to step (hold to access parts)
+    // 3 - trigger 1st step of pad (no recording)
+    // 4 - ? Advance one step per received note
+    // 5 - tap to set sequencer position (no recording)
+    rec_mode = 1
     transpose = NO
     transposeNote = 0
     mode_multi_pattern = NO
@@ -123,6 +136,8 @@
     tickCounter = 0
     gateX_knob = -1
     probability_knob = 100
+    
+    shiftDownTick = -1
   endif
 
   SetKnobValue KNOB_STEP, 48          // 1/8
@@ -388,6 +403,8 @@
   _el_pct = (Round _el_ticks / (tickTime / timer_tick_resolution) * 100)
   nn = MIDINote
   v = MIDIVelocity
+  last_nn = nn
+  last_v = v
 
   if transpose AND mode_pad_edit <> 1 
     transposeNote = MIDINote - 48
@@ -395,7 +412,7 @@
     Exit
   endif
   
-  if not ((record and HostRunning) or mode_pad_edit = 1) or (uiMode = UIMODE_BUTTONS)
+  if not ((record and HostRunning) or mode_pad_edit = 1) or (uiMode = UIMODE_BUTTONS) or rec_mode = 2
     SendMidiThruOnCh pattern_midich[active_pattern]
     Exit
   endif
@@ -431,6 +448,21 @@
     endif
   endif
   
+  call @RecordMidiNoteOn
+@End
+
+@RecStepInput
+  nn = last_nn
+  v = last_v
+  _note_on_ticks = last_pulse_ticks
+  _supressMidiThru = YES
+
+  call @RecordMidiNoteOn  
+@End
+
+// inputs:
+// nn, v, _supressMidiThru, _note_part, _step, _note_on_ticks (set to last_pulse_ticks for quantization to part)
+@RecordMidiNoteOn
   v_trans = Clip v * pattern_velocurve[active_pattern], 0, 127 
 
   if not _supressMidiThru
@@ -481,16 +513,18 @@
 
   // Store part so that MidiNoteOff can reference all data of the note being played
   SetNoteState 0, nn, _note_part    
-
+log {MPE:},mode_pad_edit, { U_B:},UIMODE_BUTTONS, {uimode: }, uiMode
   if not mode_pad_edit
-    if not UIMODE_BUTTONS
+    if uiMode <> UIMODE_BUTTONS
       LabelPad _step, _poly_offset, {:}, (NoteName nn, YES) 
+Log {Hej }, nn
     endif
     LatchPad _step, 1
   endif
   last_note = nn      // for single-tap edit
   last_velocity = nn  
 @End 
+
 
 @OnMidiNoteOff
 
@@ -535,6 +569,8 @@
   elseif midi_rec_mode <> MIDI_REC_OFF
     gateX[_note_part] = gateX_knob  // Set fixed gate from knob if CC arm is on 
   endif
+  
+  last_gatepct = gateX[_note_part]  // for step input
 
   if not mode_pad_edit 
     LabelPad _note_step, (NoteName nn, YES), {:}, Round(gateX[_note_part]) 
@@ -648,7 +684,7 @@
 //  ╚═╗╠═╣║╠╣  ║ 
 //  ╚═╝╩ ╩╩╚   ╩ 
 
-@OnShiftDown
+@OnShiftSingleTap
   if uiMode = UIMODE_PADS and mode_pad_edit = 1
     Call @SetUIMode_Voices 
   elseif uiMode = UIMODE_VOICES
@@ -660,7 +696,31 @@
   elseif uiMode = UIMODE_HELP
     Call @SetUIMode_Buttons
   endif
-@End 
+  
+  Log {SHIFT singletapped.}
+@End
+
+@OnShiftHoldRelease
+  Log {SHIFT released after holding.}
+@End
+
+@OnShiftHold
+  Log {SHIFT holding...}
+@End
+
+@OnShiftDown
+  shiftDownTick = CurrentTimerTicks
+@End
+
+@OnShiftUp
+  if (CurrentTimerTicks - shiftDownTick) < padAnalyseTicks
+    call @OnShiftSingleTap
+  else
+    call @OnShiftHoldRelease
+  endif
+  
+  shiftDownTick = -1
+@End
 
 
 //  ╔═╗╔═╗╔╦╗       ╦ ╦╔═╗╦  ╔╦╗
@@ -714,10 +774,30 @@
 
 @OnPadSingleTap // param: pad
   if uiMode = UIMODE_PADS and mode_pad_edit = 1
-    Call @OnPadSingleTap_InPadEdit
-
+    if rec_mode = 2
+      if (pad_edit_step > 7 AND pad > 7) OR (pad_edit_step <= 7 AND pad <= 7)  // pad and tapped pad are on the same row  
+        Exit
+      else  
+        _note_part = (active_pattern * sizeof_pattern) + pad_edit_step * step_reso + (pad % step_reso)
+        _step = pad_edit_step
+        LabelPad pad, (NoteName last_nn, YES) 
+        LatchPad pad, YES 
+        Call @RecStepInput
+      endif
+    else
+      Call @OnPadSingleTap_InPadEdit
+    endif
   elseif uiMode = UIMODE_PADS  // pads
-    Call @EnterPadEditMode
+    if rec_mode < 2
+      Call @EnterPadEditMode
+    elseif rec_mode = 2
+      _step = LastPad
+      _note_part = (active_pattern * sizeof_pattern) + _step * step_reso
+      Call @RecStepInput
+    elseif rec_mode = 3
+      resetStepOnNewStep = 1  // REFACTOR: Use only reset_step
+      reset_step = LastPad
+    endif
 
   elseif uiMode = UIMODE_BUTTONS and mode_copy_pattern = YES
     Call @OnPadSingleTap_InCopyPattern
@@ -1124,7 +1204,7 @@
       gateX[(active_pattern * sizeof_pattern) + _np] = gateX_knob
     endif
 
-  elseif LastKnob = KNOB_PROBABILITY
+  elseif LastKnob = 100 // won't trigger - KNOB_PROBABILITY
     _probability = (GetKnobValue KNOB_PROBABILITY) / 127 * 100
     if mode_pad_edit = 1
       note_probability[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _probability
@@ -1133,6 +1213,31 @@
     endif
     probability_knob = _probability
     LabelKnobs (Round probability_knob), {%}
+ 
+  elseif LastKnob = KNOB_RECMODE
+    if (Round (TranslateScale (GetKnobValue KNOB_RECMODE), 0, 127, 0, 3)) <> rec_mode
+      rec_mode = Round (TranslateScale (GetKnobValue KNOB_RECMODE), 0, 127, 0, 3)
+
+      if rec_mode = 0
+        record = NO
+        LabelKnob KNOB_RECMODE, {Rec off ⚪️}
+        LabelKnobs {Rec off ⚪️}
+      elseif rec_mode = 1
+        record = YES
+        LabelKnob KNOB_RECMODE, {Live 🔴}
+        LabelKnobs {Live & step 🔴}
+      elseif rec_mode = 2
+        record = NO
+        LabelKnob KNOB_RECMODE, {Last 🔴}
+        LabelKnobs {Tap=🔴 last note}
+      elseif rec_mode = 3
+        record = NO
+        LabelKnob KNOB_RECMODE, {Trig ⚪️}
+        LabelKnobs {Tap=trig step ⚪️}
+      endif
+    endif
+    
+
 
   elseif LastKnob = KNOB_VELOCITY
     _vxknob = GetKnobValue KNOB_VELOCITY
@@ -1608,7 +1713,18 @@
   endif
   SetKnobValue KNOB_VELOCITY, _vxknob
 
-  LabelKnob KNOB_PROBABILITY, {Probability}
+  if rec_mode = 0
+    LabelKnob KNOB_RECMODE, {Rec off ⚪️}
+  elseif rec_mode = 1
+    LabelKnob KNOB_RECMODE, {Live 🔴}
+  elseif rec_mode = 2
+    LabelKnob KNOB_RECMODE, {Last 🔴}
+  elseif rec_mode = 3
+    LabelKnob KNOB_RECMODE, {Trig ⚪️}
+  endif
+  SetKnobValue KNOB_RECMODE, (TranslateScale rec_mode, 0, 3, 0, 127)
+
+
   LabelKnob KNOB_STRUM, {Strum}
   SetKnobValue KNOB_STRUM, (TranslateScale pattern_strum[active_pattern], 0, 200, 0, 127) 
  
@@ -1747,6 +1863,13 @@
 @OnTimer
 
   CurrentTimerTicks = (CurrentTimerTicks + 1) % 65534  // Wraps around every ~10 minutes
+  
+  if shiftDownTick <> -1 // Shift has been pressed
+    if (CurrentTimerTicks - shiftDownTick) > padAnalyseTicks
+      call @OnShiftHold
+      shiftDownTick = -1
+    endif  
+  endif
   
   if padsActiveCnt = 0
     Exit
