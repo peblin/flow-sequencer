@@ -67,16 +67,16 @@
   BTN_CLEAR_ARMED = 7
   BTN_HELP = 15
 
-  // Knobs for pads
+  // Knobs for pad options
   KNOB_GATE = 0
   KNOB_VELOCITY = 1
-  KNOB_PROBABILITY = 2
-  KNOB_RECMODE = 2
-  KNOB_STRUM = 3
+  KNOB_STRUM = 2
  
-  // Knobs for pattern
+  // Knobs for pad
   KNOB_STEP = 0
   KNOB_MIDICH = 1
+  KNOB_RECMODE = 2
+  KNOB_QUANT = 3
   
   // Knobs for voices
   // VKNOB_VOICE1 = 0
@@ -170,11 +170,6 @@
     probability_knob = 100
     shiftDownTick = -1  // for shift HOLD mode
   endif
-
-  SetKnobValue KNOB_STEP, 48          // 1/8
-  SetKnobValue KNOB_GATE, 0       // As played
-  SetKnobValue KNOB_PROBABILITY, 127  // 100%
-  SetKnobValue KNOB_MIDICH, 1         // Default Midi Channel 1
 
   call @ComputeTimes
   Call @InitSequencer
@@ -989,10 +984,10 @@ Log {Hej }, nn
       LabelPads {CC 🅾️OVERDUB ⚠️ Hold CC rec to clear CC automation for current pattern ⚠️}
     endif
 
-  elseif pad = BTN_QUANTIZE
-    quantize = (quantize + 1) % 3
-    Call @UpdateGUI
-    
+ // elseif pad = BTN_QUANTIZE
+ //   quantize = (quantize + 1) % 3
+ //   Call @UpdateGUI
+
   elseif pad = BTN_COPY_PATTERN
     LabelPads { Select pattern to copy active pattern to }
     mode_copy_pattern = YES
@@ -1139,7 +1134,7 @@ Log {Hej }, nn
     gateX[_part] = _ntx
     LabelKnobs _ntx, {%}
     
-  elseif LastKnob = 13 
+  elseif LastKnob = 14 
     _p = Round(_value / 127 * 100)
     note_probability[_part] = _p
     LabelKnobs _p, {%}
@@ -1194,7 +1189,7 @@ Log {Hej }, nn
     _v = Clip voice6_velocity[_part] * _vcurve, 0, 127 
     LabelKnob 5, (NoteName _n, YES), {:}, Round _v
 
-  elseif LastKnob = 14
+  elseif LastKnob = 13
       _value = TranslateScale _value, 0, 127, 0, 200
       note_strum[_part] = _value
       LabelKnobs (Round _value), {ms}
@@ -1248,7 +1243,60 @@ Log {Hej }, nn
 @OnKnobChange_PadOptions
   _value = GetKnobValue LastKnob
 
-  if LastKnob = 3
+  if LastKnob = KNOB_GATE
+    gateX_knob = Round((GetKnobValue KNOB_GATE) / 127 * 800)  
+    if gateX_knob < 6.25
+      gateX_knob = -1 // "As Played"
+      LabelKnobs {As Played}
+    else
+      LabelKnobs gateX_knob*1.000, {%}
+    endif
+    if gateX_knob > 0 and mode_pad_edit = 1    // REFACTOR: use pad_edit_note_part below (and in other similar places)
+      gateX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = gateX_knob
+//      Log {Recording gate change for }, pad_edit_step, {:}, pad_edit_part
+    elseif gateX_knob > 0 and midi_rec_mode <> MIDI_REC_OFF
+    // Record knob movement - to *next* part as the current has already sent its midi notes. 
+      _np = (note_part + 1) % sizeof_pattern 
+      gateX[(active_pattern * sizeof_pattern) + _np] = gateX_knob
+    endif
+
+  elseif LastKnob = KNOB_VELOCITY
+    _vxknob = GetKnobValue KNOB_VELOCITY
+    if _vxknob = 0
+      _vx = -1
+    elseif    _vxknob < 60
+      _vx = TranslateScale _vxknob, 1, 60, 0, 1
+    elseif _vxknob > 68
+      _vx = TranslateScale _vxknob, 69, 127, 1, 10
+    else
+      _vx = 1.0
+    endif
+
+    if mode_pad_edit = 1
+      note_velocityX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _vx
+    elseif midi_rec_mode <> MIDI_REC_OFF    // Record knob movement - to *next* part as the current has already sent its midi notes. 
+      _np = (note_part + 1) % sizeof_pattern 
+      note_velocityX[(active_pattern * sizeof_pattern) + _np] = _vx
+    endif
+    if _vx >= 0
+      LabelKnobs (Round _vx * 100), {%}
+    else
+      LabelKnobs {As played}
+    endif
+    pattern_velocurve[active_pattern] = _vx
+
+  elseif LastKnob = KNOB_STRUM
+    _s = (TranslateScale (GetKnobValue KNOB_STRUM), 0, 127, 0, 200)
+    pattern_strum[active_pattern] = _s
+    if mode_pad_edit = 1
+      note_strum[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _s
+    elseif midi_rec_mode <> MIDI_REC_OFF    // Record knob movement - to *next* part as the current has already sent its midi notes. 
+      _np = (note_part + 1) % sizeof_pattern 
+      note_strum[(active_pattern * sizeof_pattern) + _np] = _s
+    endif
+    LabelKnobs (Round _s)
+
+  elseif LastKnob = 3
     _value = Round _value
     pattern_CC_slot_map[active_pattern * midi_slots] = _value
     LabelKnob 3, {A:CC }, _value
@@ -1276,66 +1324,15 @@ Log {Hej }, nn
 @End
 
 @OnKnobChange_Buttons
-  if LastKnob = KNOB_STEP
-    currentDivisor = Round ((GetKnobValue KNOB_STEP) / 16)
-    if currentDivisor = 0
-      LabelKnobs {1/32}
-    elseif currentDivisor = 1
-      LabelKnobs {1/16}
-    elseif currentDivisor = 2
-      LabelKnobs {1/8t}
-    elseif currentDivisor = 3
-      LabelKnobs {1/8}
-    elseif currentDivisor = 4
-      LabelKnobs {1/4}
-    elseif currentDivisor = 5
-      LabelKnobs {1/2}
-    elseif currentDivisor = 6
-      LabelKnobs {bar}
-    elseif currentDivisor = 7
-      LabelKnobs {2 bar}
-    endif
-    call @ComputeTimes
-
-  elseif LastKnob = KNOB_MIDICH
-    _midich = RoundDown((GetKnobValue KNOB_MIDICH) / 128 * 16)
-    pattern_midich[active_pattern] = _midich
-    LabelKnobs _midich + 1
-  endif
+  call @OnKnobChange_Pads
 @End
 
 @OnKnobChange_Pads
+  _value = GetKnobValue LastKnob
 
-  if LastKnob = KNOB_GATE
-    gateX_knob = Round((GetKnobValue KNOB_GATE) / 127 * 800)  
-    if gateX_knob < 6.25
-      gateX_knob = -1 // "As Played"
-      LabelKnobs {As Played}
-    else
-      LabelKnobs gateX_knob*1.000, {%}
-    endif
-    if gateX_knob > 0 and mode_pad_edit = 1    // REFACTOR: use pad_edit_note_part below (and in other similar places)
-      gateX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = gateX_knob
-//      Log {Recording gate change for }, pad_edit_step, {:}, pad_edit_part
-    elseif gateX_knob > 0 and midi_rec_mode <> MIDI_REC_OFF
-    // Record knob movement - to *next* part as the current has already sent its midi notes. 
-      _np = (note_part + 1) % sizeof_pattern 
-      gateX[(active_pattern * sizeof_pattern) + _np] = gateX_knob
-    endif
-
-  elseif LastKnob = 100 // wont trigger - KNOB_PROBABILITY
-    _probability = (GetKnobValue KNOB_PROBABILITY) / 127 * 100
-    if mode_pad_edit = 1
-      note_probability[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _probability
-    else
-      note_probability[(active_pattern * sizeof_pattern) + note_part] = _probability
-    endif
-    probability_knob = _probability
-    LabelKnobs (Round probability_knob), {%}
- 
-  elseif LastKnob = KNOB_RECMODE
-    if (Round (TranslateScale (GetKnobValue KNOB_RECMODE), 0, 127, 0, 3)) <> rec_mode
-      rec_mode = Round (TranslateScale (GetKnobValue KNOB_RECMODE), 0, 127, 0, 3)
+  if LastKnob = KNOB_RECMODE
+    if (Round (TranslateScale _value, 0, 127, 0, 4)) <> rec_mode
+      rec_mode = Round (TranslateScale _value, 0, 127, 0, 4)
 
       if rec_mode = 0
         record = NO
@@ -1353,46 +1350,64 @@ Log {Hej }, nn
         record = NO
         LabelKnob KNOB_RECMODE, {Trig ⚪️}
         LabelKnobs {Tap=trig step ⚪️}
+      elseif rec_mode = 4
+        record = NO
+        transpose = YES
+        LabelKnob KNOB_RECMODE, {Transp ⚠️}
+        LabelKnobs {Transpose ⚠️}
       endif
     endif
-    
-
-
-  elseif LastKnob = KNOB_VELOCITY
-    _vxknob = GetKnobValue KNOB_VELOCITY
-    if _vxknob = 0
-      _vx = -1
-    elseif    _vxknob < 60
-      _vx = TranslateScale _vxknob, 1, 60, 0, 1
-    elseif _vxknob > 68
-      _vx = TranslateScale _vxknob, 69, 127, 1, 10
-    else
-      _vx = 1.0
+  elseif LastKnob = KNOB_STEP
+    currentDivisor = Round (_value / 16)
+    if currentDivisor = 0
+      LabelKnobs {1/32}
+      LabelKnob KNOB_STEP, {1/32}
+    elseif currentDivisor = 1
+      LabelKnobs {1/16}
+      LabelKnob KNOB_STEP, {1/16}
+    elseif currentDivisor = 2
+      LabelKnobs {1/8t}
+      LabelKnob KNOB_STEP, {1/8t}      
+    elseif currentDivisor = 3
+      LabelKnobs {1/8}
+      LabelKnob KNOB_STEP, {1/8}
+    elseif currentDivisor = 4
+      LabelKnobs {1/4}
+      LabelKnob KNOB_STEP, {1/4}
+    elseif currentDivisor = 5
+      LabelKnobs {1/2}
+      LabelKnob KNOB_STEP, {1/2}
+    elseif currentDivisor = 6
+      LabelKnobs {bar}
+      LabelKnob KNOB_STEP, {bar}
+    elseif currentDivisor = 7
+      LabelKnobs {2 bar}
+      LabelKnob KNOB_STEP, {2 bar}
     endif
+    call @ComputeTimes
 
-    if mode_pad_edit = 1
-      note_velocityX[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _vx
-    elseif midi_rec_mode <> MIDI_REC_OFF    // Record knob movement - to *next* part as the current has already sent its midi notes. 
-      _np = (note_part + 1) % sizeof_pattern 
-      note_velocityX[(active_pattern * sizeof_pattern) + _np] = _vx
-    endif
-    if _vx >= 0
-      LabelKnobs (Round _vx * 100), {%}
-    else
-      LabelKnobs {As played}
-    endif
-    pattern_velocurve[active_pattern] = _vx
+  elseif LastKnob = KNOB_MIDICH
+    _midich = RoundDown(_value / 128 * 16)
+    pattern_midich[active_pattern] = _midich
+    LabelKnobs _midich + 1
+    LabelKnob KNOB_MIDICH, {MidiCH }, _midich + 1
+  
+  elseif LastKnob = KNOB_QUANT
+    quantize = Round (TranslateScale _value, 0, 127, 0, 2)
 
-    elseif LastKnob = KNOB_STRUM
-      _s = (TranslateScale (GetKnobValue KNOB_STRUM), 0, 127, 0, 200)
-      pattern_strum[active_pattern] = _s
-      if mode_pad_edit = 1
-        note_strum[(active_pattern * sizeof_pattern) + (pad_edit_step*step_reso) + pad_edit_part] = _s
-      elseif midi_rec_mode <> MIDI_REC_OFF    // Record knob movement - to *next* part as the current has already sent its midi notes. 
-        _np = (note_part + 1) % sizeof_pattern 
-        note_strum[(active_pattern * sizeof_pattern) + _np] = _s
-      endif
-      LabelKnobs (Round _s)
+    Log { Quantize:  }, quantize
+
+    if quantize = QUANT_NONE
+      LabelKnobs {None}
+      LabelKnob KNOB_QUANT, {Q: None} 
+    elseif quantize = QUANT_PART
+      LabelKnobs {Part (1/8 step)}
+      LabelKnob KNOB_QUANT, {Q: Part} 
+    else // QUANT_STEP
+      LabelKnob KNOB_QUANT, {Q: Step}
+      LabelKnobs {Step}
+  endif
+
   endif
 @End
 
@@ -1617,8 +1632,8 @@ Log {Hej }, nn
   endif
   SetKnobValue 11, _ntx
 
-  LabelKnob 13, {Probability}
-  SetKnobValue 13, (TranslateScale note_probability[_edit_note_part], 0, 100, 0, 127)
+  LabelKnob 14, {Probability}
+  SetKnobValue 14, (TranslateScale note_probability[_edit_note_part], 0, 100, 0, 127)
 
   LabelKnob 15, {Ratchet}
   SetKnobValue 15, (TranslateScale note_repeat[_edit_note_part], 1, 6, 0, 127)
@@ -1634,8 +1649,8 @@ Log {Hej }, nn
   endif
   SetKnobValue 12, _vxknob
  
-  LabelKnob 14, {Strum}
-  SetKnobValue 14, (TranslateScale pattern_strum[active_pattern], 0, 200, 0, 127) 
+  LabelKnob 13, {Strum}
+  SetKnobValue 13, (TranslateScale pattern_strum[active_pattern], 0, 200, 0, 127) 
  
   LabelKnob 18, {A:CC }, pattern_CC_slot_map[active_pattern*midi_slots]
   SetKnobValue 18, pattern_CC_slot_map[active_pattern*midi_slots]
@@ -1757,11 +1772,11 @@ Log {Hej }, nn
     LatchPad po, 0
   endfor
   
-  if transpose
-    LabelPad BTN_TRANSPOSE, {⚠️Transp ON}
-  else
-    LabelPad BTN_TRANSPOSE, {Transp OFF}
-  endif
+//  if transpose
+//    LabelPad BTN_TRANSPOSE, {⚠️Transp ON}
+//  else
+//    LabelPad BTN_TRANSPOSE, {Transp OFF}
+//  endif
 
   LabelPad BTN_CLEAR_ALL, {Clear all}
 
@@ -1783,13 +1798,13 @@ Log {Hej }, nn
   LabelPad BTN_CLEAR_ARMED, {Clear armed}
   LabelPad BTN_HELP, {ℹ️Help}
 
-  if quantize = QUANT_NONE
-    LabelPad BTN_QUANTIZE, {Quant: None} 
-  elseif quantize = QUANT_PART
-    LabelPad BTN_QUANTIZE, {Quant: Part} 
-  else // QUANT_STEP
-    LabelPad BTN_QUANTIZE, {Quant: Step} 
-  endif
+//  if quantize = QUANT_NONE
+//    LabelPad BTN_QUANTIZE, {Quant: None} 
+//  elseif quantize = QUANT_PART
+//    LabelPad BTN_QUANTIZE, {Quant: Part} 
+//  else // QUANT_STEP
+//    LabelPad BTN_QUANTIZE, {Quant: Step} 
+//  endif
 
   if mode_multi_pattern  
     LabelPad BTN_MULTI_PATTERN, {Play: Multi}
@@ -1820,16 +1835,60 @@ Log {Hej }, nn
 @End
 
 @GUI_LabelButtonKnobs
-  LabelKnobs {P}, active_pattern+1, { settings}
-  LabelKnob KNOB_STEP, {Step}
-  LabelKnob KNOB_MIDICH, {Midi CH}
-  SetKnobValue KNOB_MIDICH, pattern_midich[active_pattern]*8+4 
-  LabelKnob 2, { }
-  LabelKnob 3, { }
+  call @GUI_LabelPadKnobs
 @End
 
 @GUI_LabelPadKnobs
   LabelKnobs {P}, active_pattern+1, { rec params}
+  
+  if rec_mode = 0
+    LabelKnob KNOB_RECMODE, {Rec off ⚪️}
+  elseif rec_mode = 1
+    LabelKnob KNOB_RECMODE, {Live 🔴}
+  elseif rec_mode = 2
+    LabelKnob KNOB_RECMODE, {Last 🔴}
+  elseif rec_mode = 3
+    LabelKnob KNOB_RECMODE, {Trig ⚪️}
+  elseif rec_mode = 4
+    LabelKnob KNOB_RECMODE, {Transp ⚠️}
+  endif
+  SetKnobValue KNOB_RECMODE, (TranslateScale rec_mode, 0, 4, 0, 127)
+
+  if currentDivisor = 0
+    LabelKnob KNOB_STEP, {1/32}
+  elseif currentDivisor = 1
+    LabelKnob KNOB_STEP, {1/16}
+  elseif currentDivisor = 2
+    LabelKnob KNOB_STEP, {1/8t}      
+  elseif currentDivisor = 3
+    LabelKnob KNOB_STEP, {1/8}
+  elseif currentDivisor = 4
+    LabelKnob KNOB_STEP, {1/4}
+  elseif currentDivisor = 5
+    LabelKnob KNOB_STEP, {1/2}
+  elseif currentDivisor = 6
+    LabelKnob KNOB_STEP, {bar}
+  elseif currentDivisor = 7
+    LabelKnob KNOB_STEP, {2 bar}
+  endif
+
+  LabelKnob KNOB_MIDICH, {MidiCH }, pattern_midich[active_pattern]
+  SetKnobValue KNOB_MIDICH, pattern_midich[active_pattern]*8+4 
+
+  if quantize = QUANT_NONE
+    LabelKnob KNOB_QUANT, {Q: None} 
+  elseif quantize = QUANT_PART
+    LabelKnob KNOB_QUANT, {Q: Part} 
+  else // QUANT_STEP
+    LabelKnob KNOB_QUANT, {Q: Step}
+  endif
+  SetKnobValue KNOB_QUANT, TranslateScale quantize, 0, 2, 0, 127
+
+@End
+
+@GUI_LabelPadOptionsKnobs
+  LabelKnobs {Pattern Option Knobs}
+
   LabelKnob KNOB_GATE, {Gate}
   _ntx = gateX_knob
   if _ntx <= 100
@@ -1850,23 +1909,9 @@ Log {Hej }, nn
   endif
   SetKnobValue KNOB_VELOCITY, _vxknob
 
-  if rec_mode = 0
-    LabelKnob KNOB_RECMODE, {Rec off ⚪️}
-  elseif rec_mode = 1
-    LabelKnob KNOB_RECMODE, {Live 🔴}
-  elseif rec_mode = 2
-    LabelKnob KNOB_RECMODE, {Last 🔴}
-  elseif rec_mode = 3
-    LabelKnob KNOB_RECMODE, {Trig ⚪️}
-  endif
-  SetKnobValue KNOB_RECMODE, (TranslateScale rec_mode, 0, 3, 0, 127)
-
   LabelKnob KNOB_STRUM, {Strum}
   SetKnobValue KNOB_STRUM, (TranslateScale pattern_strum[active_pattern], 0, 200, 0, 127) 
-@End
-
-@GUI_LabelPadOptionsKnobs
-  LabelKnobs {Pattern Option Knobs}
+ 
 
   LabelKnob 3, {A:CC }, pattern_CC_slot_map[active_pattern*midi_slots]
   SetKnobValue 3, pattern_CC_slot_map[active_pattern*midi_slots]
@@ -1916,8 +1961,6 @@ Log {Hej }, nn
 
   Call @InitPadManager
 @End
-
-
 
 // ========= Pad Manager V2 =========
 // -ki  01.06.2019
