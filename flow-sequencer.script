@@ -7,9 +7,33 @@
 // - CC automation slots A to D mapped to AU parameters "User 0" to "User 3"
 //   - Map knobs for Flow in e.g. Velocity Keyboard, set Midi Control in AUM. Then configure per pattern which midi CC each slot maps to.
 // - Midi CC 115-118 maps to slots A to D, for use in the same way as AU parameters
+// - CC slots configuration moved to new pattern options mode
 
 // TODO:
 // - Document what labels on pads actually mean
+// - Default pad view: Knobs for recording + modes only. "rec mode", quant, midi ch?, ...?
+// - Shift HOLD in pad view: Strum, Gate, Velocity, Midi Slots, X/Y for slot A/B (possibly with knob for X/Y mode), CC rec enable/passthru (or is this always?), pads: commit quantization (or should we have a non-destrucive quantization?), nudge pattern, 
+
+// Change LabelPads below to name your patterns/tracks!
+@TrackLabels
+
+  if active_pattern = 0
+    LabelPads {1-Track 1}
+  elseif active_pattern = 1
+    LabelPads {2-Track 2}
+  elseif active_pattern = 2
+    LabelPads {3-Track 3}
+  elseif active_pattern = 3
+    LabelPads {4-Track 4}
+  elseif active_pattern = 4
+    LabelPads {5-Track 5}
+  elseif active_pattern = 5
+    LabelPads {6-Track 6}
+  elseif active_pattern = 6
+    LabelPads {7-Track 7}
+  
+  endif
+@End
 
 @Onload
   SetShortName {Flow} 
@@ -30,10 +54,11 @@
   UIMODE_BUTTONS = 2
   UIMODE_VOICES = 3
   UIMODE_HELP = 4
-
+  UIMODE_PADS_OPTIONS = 5
+  
   // Buttons
   BTN_MULTI_PATTERN = 0
-  a_RECORD = 1
+  BTN_RECORD = 1
   BTN_MIDI = 2
   BTN_QUANTIZE = 3
   BTN_TRANSPOSE = 4
@@ -135,7 +160,6 @@
   MIDI_REC_OVERDUB = 2
   
   midi_write_last_step = -1
-  midi_write_last_loop = -1
   midi_slots = 4
   
   if Unassigned currentDivisor
@@ -144,8 +168,7 @@
     tickCounter = 0
     gateX_knob = -1
     probability_knob = 100
-    
-    shiftDownTick = -1
+    shiftDownTick = -1  // for shift HOLD mode
   endif
 
   SetKnobValue KNOB_STEP, 48          // 1/8
@@ -662,7 +685,8 @@ Log {Hej }, nn
   endif
 
   if not _supressMidiThru
-    SendMidiThruOnCh pattern_midich[active_pattern]
+//    SendMidiThruOnCh pattern_midich[active_pattern]
+    SendMIDICC pattern_midich[active_pattern], _cc, _val
   endif
 
   if midi_rec_mode = MIDI_REC_WRITE and midi_write_last_step <> _step
@@ -760,10 +784,12 @@ Log {Hej }, nn
 
 @OnShiftHoldRelease
   Log {SHIFT released after holding.}
+  call @SetUIMode_Pads
 @End
 
 @OnShiftHold
   Log {SHIFT holding...}
+  call @SetUIMode_Pads_Options
 @End
 
 @OnShiftDown
@@ -1060,8 +1086,6 @@ Log {Hej }, nn
   endif
 @End
 
-
-
 //  ╦╔═╔╗╔╔═╗╔╗ ╔═╗
 //  ╠╩╗║║║║ ║╠╩╗╚═╗
 //  ╩ ╩╝╚╝╚═╝╚═╝╚═╝
@@ -1069,6 +1093,8 @@ Log {Hej }, nn
 @OnKnobChange
   if uiMode = UIMODE_PADS 
     call @OnKnobChange_Pads
+  elseif uiMode = UIMODE_PADS_OPTIONS
+    call @OnKnobChange_PadOptions
   elseif uiMode = UIMODE_BUTTONS
     call @OnKnobChange_Buttons
   elseif uiMode = UIMODE_VOICES
@@ -1216,6 +1242,35 @@ Log {Hej }, nn
     _value = Round _value
     midi4_value[_part] = _value
     LabelKnob 10, {D: }, _value
+  endif
+@End
+
+@OnKnobChange_PadOptions
+  _value = GetKnobValue LastKnob
+
+  if LastKnob = 3
+    _value = Round _value
+    pattern_CC_slot_map[active_pattern * midi_slots] = _value
+    LabelKnob 3, {A:CC }, _value
+    LabelKnobs {CC}, _value, {⚠️ Affects whole pattern! ⚠️}
+
+  elseif LastKnob = 4
+    _value = Round _value
+    pattern_CC_slot_map[active_pattern * midi_slots +1] = _value
+    LabelKnob 4, {B:CC }, _value
+    LabelKnobs {CC}, _value, {⚠️ Affects whole pattern! ⚠️}
+
+  elseif LastKnob = 8
+    _value = Round _value
+    pattern_CC_slot_map[active_pattern * midi_slots +2] = _value
+    LabelKnob 8, {C:CC }, _value
+    LabelKnobs {CC}, _value, {⚠️ Affects whole pattern! ⚠️}
+
+  elseif LastKnob = 9
+    _value = Round _value
+    pattern_CC_slot_map[active_pattern * midi_slots +3] = _value
+    LabelKnob 9, {D:CC }, _value
+    LabelKnobs {CC}, _value, {⚠️ Affects whole pattern! ⚠️}
   endif
 
 @End
@@ -1464,6 +1519,12 @@ Log {Hej }, nn
   Call @UpdateGUI
 @End
 
+@SetUIMode_Pads_Options
+  ShowLayout 0
+  uiMode = UIMODE_PADS_OPTIONS
+  Call @UpdateGUI
+@End
+
 @SetUIMode_Voices
   ShowLayout 1
   uiMode = UIMODE_VOICES
@@ -1491,6 +1552,10 @@ Log {Hej }, nn
   elseif uiMode = UIMODE_PADS
     call @GUI_PadMode
     Call @GUI_LabelPadKnobs
+
+  elseif uiMode = UIMODE_PADS_OPTIONS
+    call @GUI_PadOptionsMode
+    Call @GUI_LabelPadOptionsKnobs
 
   elseif uiMode = UIMODE_BUTTONS
     call @GUI_ButtonMode 
@@ -1625,6 +1690,11 @@ Log {Hej }, nn
     endif
   endfor
   
+  call @TrackLabels
+@End
+
+@OLD_labelpads_in_PadMode
+  
  if transpose and mode_multi_pattern
     LabelPads  {P}, active_pattern+1,{ ⚪️ }, { transpose: }, transpose, { Play: Multi}, { quant: }, quantize
   elseif transpose
@@ -1635,6 +1705,10 @@ Log {Hej }, nn
     LabelPads  {P}, active_pattern+1,{ 🔴 SOLO}, { quant: }, quantize
   endif
   
+@End
+
+@GUI_PadOptionsMode
+  LabelPads {Pattern Options}
 @End
 
 @GUI_PadEditMode
@@ -1691,11 +1765,11 @@ Log {Hej }, nn
 
   LabelPad BTN_CLEAR_ALL, {Clear all}
 
-  if record
-    LabelPad BTN_RECORD, {Live rec 🔴}
-  else
-    LabelPad BTN_RECORD, {Live rec ⚪}
-  endif
+//  if record
+//    LabelPad BTN_RECORD, {Live rec 🔴}
+//  else
+//    LabelPad BTN_RECORD, {Live rec ⚪}
+//  endif
   
   if midi_rec_mode = MIDI_REC_OFF
     LabelPad BTN_MIDI, {CC rec ⚪}
@@ -1787,10 +1861,21 @@ Log {Hej }, nn
   endif
   SetKnobValue KNOB_RECMODE, (TranslateScale rec_mode, 0, 3, 0, 127)
 
-
   LabelKnob KNOB_STRUM, {Strum}
   SetKnobValue KNOB_STRUM, (TranslateScale pattern_strum[active_pattern], 0, 200, 0, 127) 
- 
+@End
+
+@GUI_LabelPadOptionsKnobs
+  LabelKnobs {Pattern Option Knobs}
+
+  LabelKnob 3, {A:CC }, pattern_CC_slot_map[active_pattern*midi_slots]
+  SetKnobValue 3, pattern_CC_slot_map[active_pattern*midi_slots]
+  LabelKnob 4, {B:CC }, pattern_CC_slot_map[active_pattern*midi_slots +1]
+  SetKnobValue 4, pattern_CC_slot_map[active_pattern*midi_slots + 1]
+  LabelKnob 8, {C:CC }, pattern_CC_slot_map[active_pattern*midi_slots+2]
+  SetKnobValue 8, pattern_CC_slot_map[active_pattern*midi_slots + 2]
+  LabelKnob 9, {D:CC }, pattern_CC_slot_map[active_pattern*midi_slots+3]
+  SetKnobValue 9, pattern_CC_slot_map[active_pattern*midi_slots + 3]
 @End
 
 @GUI_LabelPadEditKnobs
