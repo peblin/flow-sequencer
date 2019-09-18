@@ -731,7 +731,7 @@ Log {Hej }, nn
 @OnAUParameter
   // inputs: _midi_offset, _cc, _val, _slot_base
   if not ((record and HostRunning) or mode_pad_edit = 1) or (uiMode = UIMODE_BUTTONS)  or transpose or midi_rec_mode = MIDI_REC_OFF
-    SendMidiThruOnCh pattern_midich[active_pattern]
+    SendMIDICC pattern_midich[active_pattern], _cc, _val
     Exit
   endif
 
@@ -756,6 +756,29 @@ Log {Hej }, nn
   call @RecordMidiCC
 @End
 
+@OnXYChange
+
+  _slot_base = active_pattern * midi_slots
+
+  _val = GetXValue 
+  _cc = pattern_CC_slot_map[_slot_base]
+  _midi_offset = 0
+
+  if not ((record and HostRunning) or mode_pad_edit = 1) or (uiMode = UIMODE_BUTTONS)  or transpose or midi_rec_mode = MIDI_REC_OFF
+    SendMIDICC pattern_midich[active_pattern], _cc, _val
+  else
+    call @RecordMidiCC
+  endif
+
+  _val = GetYValue 
+  _cc = pattern_CC_slot_map[_slot_base+1]
+  _midi_offset = 1
+  if not ((record and HostRunning) or mode_pad_edit = 1) or (uiMode = UIMODE_BUTTONS)  or transpose or midi_rec_mode = MIDI_REC_OFF
+    SendMIDICC pattern_midich[active_pattern], _cc, _val
+  else
+    call @RecordMidiCC
+  endif
+@End
 
 //  ╔═╗╦ ╦╦╔═╗╔╦╗
 //  ╚═╗╠═╣║╠╣  ║ 
@@ -1336,18 +1359,22 @@ Log {Hej }, nn
 
       if rec_mode = 0
         record = NO
+        transpose = NO
         LabelKnob KNOB_RECMODE, {Rec off ⚪️}
         LabelKnobs {Rec off ⚪️}
       elseif rec_mode = 1
         record = YES
+        transpose = NO
         LabelKnob KNOB_RECMODE, {Live 🔴}
         LabelKnobs {Live & step 🔴}
       elseif rec_mode = 2
         record = NO
+        transpose = NO
         LabelKnob KNOB_RECMODE, {Last 🔴}
         LabelKnobs {Tap=🔴 last note}
       elseif rec_mode = 3
         record = NO
+        transpose = NO
         LabelKnob KNOB_RECMODE, {Trig ⚪️}
         LabelKnobs {Tap=trig step ⚪️}
       elseif rec_mode = 4
