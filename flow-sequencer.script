@@ -795,11 +795,13 @@ Log {Hej }, nn
     Call @SetUIMode_Pads
   elseif uiMode = UIMODE_HELP
     Call @SetUIMode_Buttons
+  elseif uiMode = UIMODE_PADS_OPTIONS
+    Call @SetUIMode_Pads
   endif
 @End
 
 @OnShiftHoldRelease
-  call @SetUIMode_Pads
+//  call @SetUIMode_Pads
 @End
 
 @OnShiftHold
