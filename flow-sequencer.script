@@ -417,6 +417,8 @@
       if voice1[_note_part] >= 0
         if ((Random 1, 100) <= note_probability[_note_part])
           call @OnMetroPulse_notes
+        else
+          Log { Nope }
         endif
       endif
     endif
@@ -609,13 +611,9 @@ Log {Hej }, nn
 
 // REFACTOR: Uses _note_part, which is not defined here. 
 @OnMidiCC
-  if not ((record and HostRunning) or mode_pad_edit = 1) or (uiMode = UIMODE_BUTTONS)  or transpose or midi_rec_mode = MIDI_REC_OFF
-    SendMidiThruOnCh pattern_midich[active_pattern]
-    Exit
-  endif
-
   _cc = MIDIByte2
   _val = MIDIByte3
+  _slot_base = active_pattern * midi_slots
 
   // hardcoded midi CC map. not the prettiest, but collisions unlikely and easy to fix.
   if _cc >= 115 and _cc <= 118
@@ -628,11 +626,9 @@ Log {Hej }, nn
     elseif _cc = 118
       _midi_offset = 3
     endif
-    _slot_base = active_pattern * midi_slots
-    _cc = pattern_CC_slot_map[_slot_base]
+    _cc = pattern_CC_slot_map[_slot_base + _midi_offset]
   else
     _midi_offset = -1
-    _slot_base = active_pattern * midi_slots
     if pattern_CC_slot_map[_slot_base] = _cc
       _midi_offset = 0
     elseif pattern_CC_slot_map[_slot_base + 1] = _cc
@@ -658,6 +654,11 @@ Log {Hej }, nn
       endif  
       pattern_CC_slot_map[_slot_base + _midi_offset] = _cc
     endif
+  endif
+
+  if not ((record and HostRunning) or mode_pad_edit = 1) or (uiMode = UIMODE_BUTTONS)  or transpose or midi_rec_mode = MIDI_REC_OFF
+    SendMIDICC pattern_midich[active_pattern], _cc, _val
+    Exit
   endif
 
   call @RecordMidiCC
@@ -757,7 +758,6 @@ Log {Hej }, nn
 @End
 
 @OnXYChange
-
   _slot_base = active_pattern * midi_slots
 
   _val = GetXValue 
@@ -1343,7 +1343,6 @@ Log {Hej }, nn
     LabelKnob 9, {D:CC }, _value
     LabelKnobs {CC}, _value, {⚠️ Affects whole pattern! ⚠️}
   endif
-
 @End
 
 @OnKnobChange_Buttons
@@ -1421,9 +1420,6 @@ Log {Hej }, nn
   
   elseif LastKnob = KNOB_QUANT
     quantize = Round (TranslateScale _value, 0, 127, 0, 2)
-
-    Log { Quantize:  }, quantize
-
     if quantize = QUANT_NONE
       LabelKnobs {None}
       LabelKnob KNOB_QUANT, {Q: None} 
@@ -1433,8 +1429,7 @@ Log {Hej }, nn
     else // QUANT_STEP
       LabelKnob KNOB_QUANT, {Q: Step}
       LabelKnobs {Step}
-  endif
-
+    endif
   endif
 @End
 
@@ -1899,7 +1894,7 @@ Log {Hej }, nn
     LabelKnob KNOB_STEP, {2 bar}
   endif
 
-  LabelKnob KNOB_MIDICH, {MidiCH }, pattern_midich[active_pattern]
+  LabelKnob KNOB_MIDICH, {MidiCH }, pattern_midich[active_pattern] + 1
   SetKnobValue KNOB_MIDICH, pattern_midich[active_pattern]*8+4 
 
   if quantize = QUANT_NONE
