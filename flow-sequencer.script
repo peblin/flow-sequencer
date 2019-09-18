@@ -47,7 +47,7 @@
   step_reso = 8  // Grid/parts per step
   part_reso = 1 // REMOVE? Pulses per part
   poly = 6       // Max polyphony per part
-  sizeof_pattern = 16*8      // Size of storing all step parts in an array
+  sizeof_pattern = 16*8      // Size of storing all step parts in an arra//y
 
   // -- CONSTANTS -- 
   UIMODE_PADS = 1
@@ -58,10 +58,9 @@
   
   // Buttons
   BTN_MULTI_PATTERN = 0
-  BTN_RECORD = 1
-  BTN_MIDI = 2
-  BTN_QUANTIZE = 3
-  BTN_TRANSPOSE = 4
+//  // BTN_RECORD = 1
+//  // BTN_QUANTIZE = 3
+//  // BTN_TRANSPOSE = 4
   BTN_COPY_PATTERN = 5
   BTN_CLEAR_ALL = 6
   BTN_CLEAR_ARMED = 7
@@ -71,6 +70,7 @@
   KNOB_GATE = 0
   KNOB_VELOCITY = 1
   KNOB_STRUM = 2
+  BTN_MIDI = 0
  
   // Knobs for pad
   KNOB_STEP = 0
@@ -796,17 +796,13 @@ Log {Hej }, nn
   elseif uiMode = UIMODE_HELP
     Call @SetUIMode_Buttons
   endif
-  
-  Log {SHIFT singletapped.}
 @End
 
 @OnShiftHoldRelease
-  Log {SHIFT released after holding.}
   call @SetUIMode_Pads
 @End
 
 @OnShiftHold
-  Log {SHIFT holding...}
   call @SetUIMode_Pads_Options
 @End
 
@@ -906,6 +902,8 @@ Log {Hej }, nn
       resetStepOnNewStep = 1  // REFACTOR: Use only reset_step
       reset_step = LastPad
     endif
+  elseif uiMode = UIMODE_PADS_OPTIONS
+    Call @OnPadSingleTap_PadOptions
 
   elseif uiMode = UIMODE_BUTTONS and mode_copy_pattern = YES
     Call @OnPadSingleTap_InCopyPattern
@@ -978,13 +976,35 @@ Log {Hej }, nn
   active_pattern = _pattern  // Auto-arm after copy
 @End
 
-@OnPadSingleTap_Buttons  
-  if pad = BTN_TRANSPOSE
-    transpose = not transpose
-    LabelPad BTN_TRANSPOSE, { Transpose: }, transpose
-    LabelPads {⚠️Transpose: }, transpose
+@OnPadSingleTap_PadOptions
+  if pad = BTN_MIDI
+    midi_rec_mode = (midi_rec_mode + 1) % 3
 
-  elseif pad = BTN_CLEAR_ALL
+    if midi_rec_mode = MIDI_REC_OFF
+      LabelPad BTN_MIDI, {CC rec ⚪}
+    elseif midi_rec_mode = MIDI_REC_WRITE
+      LabelPad BTN_MIDI, {CC rec 🔴}
+    elseif midi_rec_mode = MIDI_REC_OVERDUB
+      LabelPad BTN_MIDI, {CC rec 🅾️}
+    endif
+
+    if midi_rec_mode = MIDI_REC_OFF
+      LabelPads {CC ⚪ OFF}
+    elseif midi_rec_mode = MIDI_REC_WRITE
+      LabelPads {CC 🔴 WRITE }
+    elseif midi_rec_mode = MIDI_REC_OVERDUB
+      LabelPads {CC 🅾️ OVERDUB}
+    endif
+  endif
+@End
+
+@OnPadSingleTap_Buttons  
+//  if pad = BTN_TRANSPOSE
+//    transpose = not transpose
+//    LabelPad BTN_TRANSPOSE, { Transpose: }, transpose
+//    LabelPads {⚠️Transpose: }, transpose
+
+  if pad = BTN_CLEAR_ALL
     LabelPads {⚠️ Hold Clear All pad to clear all patterns ⚠️}
     LabelPad BTN_CLEAR_ALL, {️⚠️hold=clr}
 
@@ -992,20 +1012,9 @@ Log {Hej }, nn
     LabelPads {⚠️ Hold Clear Armed pad to clear current pattern ⚠️}
     LabelPad BTN_CLEAR_ALL, {️⚠️hold=clr}
 
-  elseif pad = BTN_RECORD
-    record = not record
-    Call @UpdateGUI
-
-  elseif pad = BTN_MIDI
-    midi_rec_mode = (midi_rec_mode + 1) % 3
-    Call @UpdateGUI
-    if midi_rec_mode = MIDI_REC_OFF
-      LabelPads {CC ⚪ off ⚠️ Hold CC rec to clear CC automation for current pattern ⚠️}
-    elseif midi_rec_mode = MIDI_REC_WRITE
-      LabelPads {CC 🔴 WRITE  ⚠️ Hold CC rec to clear CC automation for current pattern ⚠️}
-    elseif midi_rec_mode = MIDI_REC_OVERDUB
-      LabelPads {CC 🅾️OVERDUB ⚠️ Hold CC rec to clear CC automation for current pattern ⚠️}
-    endif
+//  elseif pad = BTN_RECORD
+//    record = not record
+//    Call @UpdateGUI
 
  // elseif pad = BTN_QUANTIZE
  //   quantize = (quantize + 1) % 3
@@ -1049,7 +1058,7 @@ Log {Hej }, nn
       LatchPad last_active_pattern + 8, 0
       LatchPad active_pattern + 8, 1
     endif
-   endif
+  endif
 @End
 
 
@@ -1746,6 +1755,15 @@ Log {Hej }, nn
 
 @GUI_PadOptionsMode
   LabelPads {Pattern Options}
+
+  if midi_rec_mode = MIDI_REC_OFF
+    LabelPad BTN_MIDI, {CC rec ⚪}
+  elseif midi_rec_mode = MIDI_REC_WRITE
+    LabelPad BTN_MIDI, {CC rec 🔴}
+  elseif midi_rec_mode = MIDI_REC_OVERDUB
+    LabelPad BTN_MIDI, {CC rec 🅾️}
+  endif
+
 @End
 
 @GUI_PadEditMode
@@ -1808,14 +1826,6 @@ Log {Hej }, nn
 //    LabelPad BTN_RECORD, {Live rec ⚪}
 //  endif
   
-  if midi_rec_mode = MIDI_REC_OFF
-    LabelPad BTN_MIDI, {CC rec ⚪}
-  elseif midi_rec_mode = MIDI_REC_WRITE
-    LabelPad BTN_MIDI, {CC rec 🔴}
-  elseif midi_rec_mode = MIDI_REC_OVERDUB
-    LabelPad BTN_MIDI, {CC rec 🅾️}
-  endif
-
   LabelPad BTN_COPY_PATTERN, {Copy pattern}
   LabelPad BTN_CLEAR_ARMED, {Clear armed}
   LabelPad BTN_HELP, {ℹ️Help}
