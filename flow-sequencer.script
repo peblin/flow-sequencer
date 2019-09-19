@@ -1,22 +1,31 @@
 // Changelog:
-// - Hold SHIFT for more pattern options
+// - Re-structuring of controls for better usability and also to make room for more features.
+//   - Default "pads" page has pads and knobs for "mode", quantization, midi ch out and step length
+//   - Sequencer options page, reachable with SHIFT for setting Solo/Multi play modes, copying patterns and arming/disarming patterns
+//   - New "pattern options mode", reachable by long-press/hold on SHIFT. Tap SHIFT to exit. Has velocity, strum and gate controls, as well as all CC automation/recording controls. Also has X/Y pad for sending (and recording if armed) CC values for CC commands set in slot A and B (so X/Y = A/B).
+//   - Pad edit mode, reachable with HOLD on pad in default pad view
+//   - Voices mode, reachable with SHIFT when a step part is active in pad edit mode.
+// - "Master" mode knob that gives direct control of various rec/play modes.
 // - New recording mode - record last played note when tapping a step (or tap part when holding a step)
-// - Rec mode knob that gives direct control of various rec/play modes.
 // - Trigger mode to set sequencer position
 //   - In trigger mode, hold pad to repeat it until released
+// - Transpose mode moved to mode knob
 // - CC automation slots A to D mapped to AU parameters "User 0" to "User 3"
 //   - Map knobs for Flow in e.g. Velocity Keyboard, set Midi Control in AUM. Then configure per pattern which midi CC each slot maps to.
 // - Midi CC 115-118 maps to slots A to D, for use in the same way as AU parameters
 // - CC slots configuration moved to new pattern options mode
+// - CC rec mode moved to pattern options
+// - fix: "Copy Pattern" would not copy midi slots, strum or velocity knob settings. 
+// - fix: deleting a part/step would not erase all values.
 
 // TODO:
 // - Document what labels on pads actually mean
-// - Default pad view: Knobs for recording + modes only. "rec mode", quant, midi ch?, ...?
-// - Shift HOLD in pad view: Strum, Gate, Velocity, Midi Slots, X/Y for slot A/B (possibly with knob for X/Y mode), CC rec enable/passthru (or is this always?), pads: commit quantization (or should we have a non-destrucive quantization?), nudge pattern, 
+// - Maybe: CC passthru (or is this always?), commit quantization (or should we have a non-destrucive quantization?), nudge pattern in pad options view
+// - In "pads" mode, show actual notes on pads (only first part of step will be relevant)
+
 
 // Change LabelPads below to name your patterns/tracks!
 @TrackLabels
-
   if active_pattern = 0
     LabelPads {1-Track 1}
   elseif active_pattern = 1
@@ -31,7 +40,6 @@
     LabelPads {6-Track 6}
   elseif active_pattern = 6
     LabelPads {7-Track 7}
-  
   endif
 @End
 
@@ -47,7 +55,7 @@
   step_reso = 8  // Grid/parts per step
   part_reso = 1 // REMOVE? Pulses per part
   poly = 6       // Max polyphony per part
-  sizeof_pattern = 16*8      // Size of storing all step parts in an arra//y
+  sizeof_pattern = 16*8      // Size of storing all step parts in an array
 
   // -- CONSTANTS -- 
   UIMODE_PADS = 1
@@ -124,18 +132,13 @@
   clear_confirm = NO
   if Unassigned record
     record = 1 // Rec enabled by default
-    // rec_modes: (TBD)
-    // 0 - off
-    // 1 - live
-    // 2 - tap to add last received note to step (hold to access parts)
-    // 3 - trigger 1st step of pad (no recording)
-    // 4 - ? Advance one step per received note
-    // 5 - tap to set sequencer position (no recording)
     rec_mode = 1
     transpose = NO
     transposeNote = 0
     mode_multi_pattern = NO
     midi_rec_mode = 0
+    play = YES
+    reset_step = -1
   endif
 
   _res = step_reso * part_reso
@@ -253,9 +256,9 @@
 @OnMetroPulse_CC_automation
       // CC AUTOMATION
       _slot_base = _pattern * midi_slots
-      if midi1_value[_note_part] >= 0 
+      if slotA_value[_note_part] >= 0 
         _cc = pattern_CC_slot_map[_slot_base]
-        _val = midi1_value[_note_part]
+        _val = slotA_value[_note_part]
         SendMIDICC _ch, _cc, _val, 1
 //        Log step, {:}, step_part, { CC },  _cc, {:}, _val
 
@@ -263,9 +266,9 @@
         if Interpolate_steps > 0
           Interpolate_nextval = -1
           for i = 1 to step_reso
-            if midi1_value[_note_part + i] >= 0 and Interpolate_nextval = -1
-              Interpolate_nextval = midi1_value[_note_part + i]
-              Interpolate_diff = midi1_value[_note_part+i] - midi1_value[_note_part]
+            if slotA_value[_note_part + i] >= 0 and Interpolate_nextval = -1
+              Interpolate_nextval = slotA_value[_note_part + i]
+              Interpolate_diff = slotA_value[_note_part+i] - slotA_value[_note_part]
               Interpolate_dist = i * tickTime
               Call @OnMetroPulse_Interpolate
             endif
@@ -273,18 +276,18 @@
         endif
       endif
       
-      if midi2_value[_note_part] >= 0
+      if slotB_value[_note_part] >= 0
         _cc = pattern_CC_slot_map[_slot_base + 1]
-        _val = midi2_value[_note_part]
-        SendMIDICC _ch, _cc, midi2_value[_note_part], 2
-//        Log step, {:}, step_part, { CC },  _cc, {:}, midi2_value[_note_part]
+        _val = slotB_value[_note_part]
+        SendMIDICC _ch, _cc, slotB_value[_note_part], 2
+//        Log step, {:}, step_part, { CC },  _cc, {:}, slotB_value[_note_part]
         Interpolate_steps = CC_interpolation_steps[currentDivisor]
         if Interpolate_steps > 0
           Interpolate_nextval = -1
           for i = 1 to step_reso
-            if midi2_value[_note_part + i] >= 0 and Interpolate_nextval = -1
-              Interpolate_nextval = midi2_value[_note_part + i]
-              Interpolate_diff = midi2_value[_note_part+i] - midi2_value[_note_part]
+            if slotB_value[_note_part + i] >= 0 and Interpolate_nextval = -1
+              Interpolate_nextval = slotB_value[_note_part + i]
+              Interpolate_diff = slotB_value[_note_part+i] - slotB_value[_note_part]
               Interpolate_dist = i * tickTime
               Call @OnMetroPulse_Interpolate
             endif
@@ -292,18 +295,18 @@
         endif
       endif
       
-      if midi3_value[_note_part] >= 0
+      if slotC_value[_note_part] >= 0
         _cc = pattern_CC_slot_map[_slot_base + 2]
-        _val = midi3_value[_note_part]
-        SendMIDICC _ch, _cc, midi3_value[_note_part], 3 
-//        Log step, {:}, step_part, { CC },  _cc, {:}, midi3_value[_note_part]
+        _val = slotC_value[_note_part]
+        SendMIDICC _ch, _cc, slotC_value[_note_part], 3 
+//        Log step, {:}, step_part, { CC },  _cc, {:}, slotC_value[_note_part]
         Interpolate_steps = CC_interpolation_steps[currentDivisor]
         if Interpolate_steps > 0
           Interpolate_nextval = -1
           for i = 1 to step_reso
-            if midi3_value[_note_part + i] >= 0 and Interpolate_nextval = -1
-              Interpolate_nextval = midi3_value[_note_part + i]
-              Interpolate_diff = midi3_value[_note_part+i] - midi3_value[_note_part]
+            if slotC_value[_note_part + i] >= 0 and Interpolate_nextval = -1
+              Interpolate_nextval = slotC_value[_note_part + i]
+              Interpolate_diff = slotC_value[_note_part+i] - slotC_value[_note_part]
               Interpolate_dist = i * tickTime
               Call @OnMetroPulse_Interpolate
             endif
@@ -311,18 +314,18 @@
         endif
       endif
       
-      if midi4_value[_note_part] >= 0
+      if slotD_value[_note_part] >= 0
         _cc = pattern_CC_slot_map[_slot_base + 3]
-        _val = midi4_value[_note_part]      
-        SendMIDICC _ch, _cc, midi4_value[_note_part], 4
-//        Log step, {:}, step_part, { CC },  _cc, {:}, midi4_value[_note_part]
+        _val = slotD_value[_note_part]      
+        SendMIDICC _ch, _cc, slotD_value[_note_part], 4
+//        Log step, {:}, step_part, { CC },  _cc, {:}, slotD_value[_note_part]
         Interpolate_steps = CC_interpolation_steps[currentDivisor]
         if Interpolate_steps > 0
           Interpolate_nextval = -1
           for i = 1 to step_reso
-            if midi4_value[_note_part + i] >= 0 and Interpolate_nextval = -1
-              Interpolate_nextval = midi4_value[_note_part + i]
-              Interpolate_diff = midi4_value[_note_part+i] - midi4_value[_note_part]
+            if slotD_value[_note_part + i] >= 0 and Interpolate_nextval = -1
+              Interpolate_nextval = slotD_value[_note_part + i]
+              Interpolate_diff = slotD_value[_note_part+i] - slotD_value[_note_part]
               Interpolate_dist = i * tickTime
               Call @OnMetroPulse_Interpolate
             endif
@@ -387,15 +390,18 @@
     _rpttime = _gate / _rpts
     _rptdelay = _noteDelay
     for _i = 1 to _rpts
-//            Log _i, {:}, _rpttime, {,}, _rptdelay
-      SendMIDINoteOn _ch, voice1[_note_part] + _transposeNote, _v, _rptdelay      
+      SendMIDINoteOn _ch, voice1[_note_part] + _transposeNote, _v, _rptdelay
       SendMIDINoteOff _ch, voice1[_note_part] + _transposeNote, 0, _rpttime
       _rptdelay = _rptdelay + _rpttime          
     endfor
   endif
 @End
 
-@OnMetroPulse   
+@OnMetroPulse
+  if (play = NO) and (reset_step = -1)
+    Exit
+  endif
+
   last_pulse_ticks = CurrentTimerTicks
   step = seq_step
   step_part = Round(((tickCounter+1) / countPerStep) * step_reso) - 1
@@ -410,7 +416,7 @@
       _note_part = (_pattern * sizeof_pattern) + note_part
       _ch = pattern_midich[_pattern]
 
-      if midi1_value[_note_part] >= 0 or midi2_value[_note_part] >= 0 or midi3_value[_note_part] >= 0 or midi4_value[_note_part] >= 0
+      if slotA_value[_note_part] >= 0 or slotB_value[_note_part] >= 0 or slotC_value[_note_part] >= 0 or slotD_value[_note_part] >= 0
         call @OnMetroPulse_CC_automation
       endif
 
@@ -424,7 +430,12 @@
     endif
   endfor
   FlashPad step
-  Call @IncrementSequencer
+
+  if play <> NO
+    Call @IncrementSequencer
+  else
+    reset_step = -1
+  endif
 @End
 
 @OnMidiNoteOn
@@ -688,26 +699,26 @@ Log {Hej }, nn
   if midi_rec_mode = MIDI_REC_WRITE and midi_write_last_step <> _step
     _step_part = (active_pattern * sizeof_pattern) + _step * step_reso // The note location for the pad being edited.
     if _midi_offset = 0
-      FillArray midi1_value[_step_part], -1, step_reso
+      FillArray slotA_value[_step_part], -1, step_reso
     elseif _midi_offset = 1
-      FillArray midi2_value[_step_part], -1, step_reso
+      FillArray slotB_value[_step_part], -1, step_reso
     elseif _midi_offset = 2
-      FillArray midi3_value[_step_part], -1, step_reso
+      FillArray slotC_value[_step_part], -1, step_reso
     elseif _midi_offset = 3
-      FillArray midi4_value[_step_part], -1, step_reso  
+      FillArray slotD_value[_step_part], -1, step_reso  
     endif
     Log {Clearing step }, _step, { at offset }, _midi_offset
     midi_write_last_step = _step
   endif
 
   if _midi_offset = 0
-    midi1_value[_note_part] = _val
+    slotA_value[_note_part] = _val
   elseif _midi_offset = 1
-    midi2_value[_note_part] = _val
+    slotB_value[_note_part] = _val
   elseif _midi_offset = 2
-    midi3_value[_note_part] = _val
+    slotC_value[_note_part] = _val
   elseif _midi_offset = 3
-    midi4_value[_note_part] = _val
+    slotD_value[_note_part] = _val
   endif
 
   _midicount = 0
@@ -903,6 +914,12 @@ Log {Hej }, nn
     elseif rec_mode = 3
       resetStepOnNewStep = 1  // REFACTOR: Use only reset_step
       reset_step = LastPad
+    elseif rec_mode = 5
+      play = NO
+      reset_step = LastPad
+      seq_step = LastPad
+      tickCounter = 0
+      call @OnMetroPulse    
     endif
   elseif uiMode = UIMODE_PADS_OPTIONS
     Call @OnPadSingleTap_PadOptions
@@ -1063,8 +1080,6 @@ Log {Hej }, nn
   endif
 @End
 
-
-
 //  ╔═╗╔═╗╔╦╗       ╔╦╗╔═╗╦ ╦╔╗ ╦  ╔═╗  ╔╦╗╔═╗╔═╗
 //  ╠═╝╠═╣ ║║  ───   ║║║ ║║ ║╠╩╗║  ║╣    ║ ╠═╣╠═╝
 //  ╩  ╩ ╩═╩╝       ═╩╝╚═╝╚═╝╚═╝╩═╝╚═╝   ╩ ╩ ╩╩  
@@ -1089,7 +1104,14 @@ Log {Hej }, nn
     voice6[_del_note_part] = -1
     velocity[_del_note_part] = 100
     gateX[_del_note_part] = 100
-
+    note_velocityX[_del_note_part] = 100
+    note_probability[_del_note_part] = 100
+    note_repeat[_del_note_part] = 1    
+    note_strum[_del_note_part] = 0
+    slotA_value[_del_note_part] = -1
+    slotB_value[_del_note_part] = -1
+    slotC_value[_del_note_part] = -1
+    slotD_value[_del_note_part] = -1
     LatchPad pad, 0
     LabelPad pad, { }
   else
@@ -1106,8 +1128,15 @@ Log {Hej }, nn
       voice5[_del_note_part] = -1
       voice6[_del_note_part] = -1
       velocity[_del_note_part] = 100
+      note_velocityX[_del_note_part] = 100
+      note_probability[_del_note_part] = 100
       gateX[_del_note_part] = 100
       note_repeat[_del_note_part] = 1
+      note_strum[_del_note_part] = 0
+      slotA_value[_del_note_part] = -1
+      slotB_value[_del_note_part] = -1
+      slotC_value[_del_note_part] = -1
+      slotD_value[_del_note_part] = -1
     endfor
   
     LatchPad del_step, 0
@@ -1236,7 +1265,7 @@ Log {Hej }, nn
 
   elseif LastKnob = 7
     _value = Round _value
-    midi1_value[_part] = _value
+    slotA_value[_part] = _value
     LabelKnob 7, {A: }, _value
     
   elseif LastKnob = 19
@@ -1247,7 +1276,7 @@ Log {Hej }, nn
 
   elseif LastKnob = 8
     _value = Round _value
-    midi2_value[_part] = _value
+    slotB_value[_part] = _value
     LabelKnob 8, {B: }, _value
 
   elseif LastKnob = 20
@@ -1258,7 +1287,7 @@ Log {Hej }, nn
 
   elseif LastKnob = 9
     _value = Round _value
-    midi3_value[_part] = _value
+    slotC_value[_part] = _value
     LabelKnob 9, {C: }, _value
 
   elseif LastKnob = 21
@@ -1269,7 +1298,7 @@ Log {Hej }, nn
 
   elseif LastKnob = 10
     _value = Round _value
-    midi4_value[_part] = _value
+    slotD_value[_part] = _value
     LabelKnob 10, {D: }, _value
   endif
 @End
@@ -1364,34 +1393,36 @@ Log {Hej }, nn
   _value = GetKnobValue LastKnob
 
   if LastKnob = KNOB_RECMODE
-    if (Round (TranslateScale _value, 0, 127, 0, 4)) <> rec_mode
-      rec_mode = Round (TranslateScale _value, 0, 127, 0, 4)
+    if (Round (TranslateScale _value, 0, 127, 0, 5)) <> rec_mode
+      rec_mode = Round (TranslateScale _value, 0, 127, 0, 5)
+
+      // defaults
+      play = YES
+      record = NO
+      transpose = NO
+      FillArray padExclude, NO, 16
 
       if rec_mode = 0
-        record = NO
-        transpose = NO
         LabelKnob KNOB_RECMODE, {Rec off ⚪️}
         LabelKnobs {Rec off ⚪️}
       elseif rec_mode = 1
         record = YES
-        transpose = NO
         LabelKnob KNOB_RECMODE, {Live 🔴}
         LabelKnobs {Live & step 🔴}
       elseif rec_mode = 2
-        record = NO
-        transpose = NO
         LabelKnob KNOB_RECMODE, {Last 🔴}
         LabelKnobs {Tap=🔴 last note}
       elseif rec_mode = 3
-        record = NO
-        transpose = NO
         LabelKnob KNOB_RECMODE, {Trig ⚪️}
         LabelKnobs {Tap=trig step ⚪️}
       elseif rec_mode = 4
-        record = NO
         transpose = YES
         LabelKnob KNOB_RECMODE, {Transp ⚠️}
         LabelKnobs {Transpose ⚠️}
+      elseif rec_mode = 5
+        FillArray padExclude, YES, 16  // exclude all pads from "hold detection" by PadManager
+        LabelKnob KNOB_RECMODE, {Pads}
+        LabelKnobs {Pads}
       endif
     endif
   elseif LastKnob = KNOB_STEP
@@ -1451,9 +1482,9 @@ Log {Hej }, nn
 //  _pattern = CopyPattern_pattern
 //  _src_pattern_pos = CopyPattern_src_pattern_pos
 //  _dest_pattern_pos = CopyPattern_dest_pattern_pos
+//  active_pattern
+//  _pattern -- the pattern to copy to
 @CopyPattern
-
-
   CopyArray voice1[_src_pattern_pos], voice1[_dest_pattern_pos], sizeof_pattern
   CopyArray voice2[_src_pattern_pos], voice2[_dest_pattern_pos], sizeof_pattern
   CopyArray voice3[_src_pattern_pos], voice3[_dest_pattern_pos], sizeof_pattern
@@ -1473,7 +1504,18 @@ Log {Hej }, nn
   CopyArray note_probability[_src_pattern_pos], note_probability[_dest_pattern_pos], sizeof_pattern
   CopyArray note_velocityX[_src_pattern_pos], note_velocityX[_dest_pattern_pos], sizeof_pattern
   CopyArray note_strum[_src_pattern_pos], note_strum[_dest_pattern_pos], sizeof_pattern
-  CopyArray note_repeat[_src_pattern_pos], note_strum[_dest_pattern_pos], sizeof_pattern
+  CopyArray note_repeat[_src_pattern_pos], note_repeat[_dest_pattern_pos], sizeof_pattern
+
+  CopyArray midicount[_src_pattern_pos], midicount[_dest_pattern_pos], sizeof_pattern
+  CopyArray slotA_value[_src_pattern_pos], slotA_value[_dest_pattern_pos], sizeof_pattern
+  CopyArray slotB_value[_src_pattern_pos], slotB_value[_dest_pattern_pos], sizeof_pattern
+  CopyArray slotC_value[_src_pattern_pos], slotC_value[_dest_pattern_pos], sizeof_pattern
+  CopyArray slotD_value[_src_pattern_pos], slotD_value[_dest_pattern_pos], sizeof_pattern
+
+  CopyArray pattern_CC_slot_map[active_pattern * midi_slots], pattern_CC_slot_map[_pattern * midi_slots], midi_slots
+  pattern_velocurve[_pattern] = pattern_velocurve[active_pattern]
+  pattern_strum[_pattern] = pattern_strum[active_pattern]
+
 @End
 
 //  ┌─┐┬  ┌─┐┌─┐┬─┐  ┌─┐┌─┐┌┬┐┌┬┐┌─┐┬─┐┌┐┌┌─┐
@@ -1495,10 +1537,10 @@ Log {Hej }, nn
   FillArray voice6, -1
   FillArray voice6_velocity, 0
   FillArray midicount, 0
-  FillArray midi1_value, -1
-  FillArray midi2_value, -1
-  FillArray midi3_value, -1
-  FillArray midi4_value, -1
+  FillArray slotA_value, -1
+  FillArray slotB_value, -1
+  FillArray slotC_value, -1
+  FillArray slotD_value, -1
   FillArray pattern_CC_slot_map, -1
   FillArray pattern_velocurve, 1.0, 8
   FillArray pattern_strum, 0, 8
@@ -1535,10 +1577,10 @@ Log {Hej }, nn
   FillArray note_probability[_pattern_start], 100 , sizeof_pattern
   FillArray note_repeat[_pattern_start], 1, sizeof_pattern
   FillArray midicount[_pattern_start], 0, sizeof_pattern
-  FillArray midi1_value[_pattern_start], -1, sizeof_pattern
-  FillArray midi2_value[_pattern_start], -1, sizeof_pattern
-  FillArray midi3_value[_pattern_start], -1, sizeof_pattern
-  FillArray midi4_value[_pattern_start], -1, sizeof_pattern
+  FillArray slotA_value[_pattern_start], -1, sizeof_pattern
+  FillArray slotB_value[_pattern_start], -1, sizeof_pattern
+  FillArray slotC_value[_pattern_start], -1, sizeof_pattern
+  FillArray slotD_value[_pattern_start], -1, sizeof_pattern
   FillArray pattern_CC_slot_map[active_pattern * midi_slots], -1, midi_slots
   pattern_velocurve[active_pattern] = 1.0
   pattern_strum[active_pattern] = 0
@@ -1547,10 +1589,10 @@ Log {Hej }, nn
 @ClearActivePatternMidi
   _pattern_start = active_pattern * sizeof_pattern
   FillArray midicount[_pattern_start], 0, sizeof_pattern
-  FillArray midi1_value[_pattern_start], -1, sizeof_pattern
-  FillArray midi2_value[_pattern_start], -1, sizeof_pattern
-  FillArray midi3_value[_pattern_start], -1, sizeof_pattern
-  FillArray midi4_value[_pattern_start], -1, sizeof_pattern
+  FillArray slotA_value[_pattern_start], -1, sizeof_pattern
+  FillArray slotB_value[_pattern_start], -1, sizeof_pattern
+  FillArray slotC_value[_pattern_start], -1, sizeof_pattern
+  FillArray slotD_value[_pattern_start], -1, sizeof_pattern
   FillArray pattern_CC_slot_map[active_pattern * midi_slots], -1, midi_slots
 @End
 
@@ -1694,17 +1736,17 @@ Log {Hej }, nn
   LabelKnob 21, {D:CC }, pattern_CC_slot_map[active_pattern*midi_slots+3]
   SetKnobValue 21, pattern_CC_slot_map[active_pattern*midi_slots + 3]
 
-  LabelKnob 7, {A: }, midi1_value[_edit_note_part]
-  SetKnobValue 7, midi1_value[_edit_note_part]
+  LabelKnob 7, {A: }, slotA_value[_edit_note_part]
+  SetKnobValue 7, slotA_value[_edit_note_part]
 
-  LabelKnob 8, {B: }, midi2_value[_edit_note_part]
-  SetKnobValue 8, midi2_value[_edit_note_part]
+  LabelKnob 8, {B: }, slotB_value[_edit_note_part]
+  SetKnobValue 8, slotB_value[_edit_note_part]
 
-  LabelKnob 9, {C: }, midi3_value[_edit_note_part]
-  SetKnobValue 9, midi3_value[_edit_note_part]
+  LabelKnob 9, {C: }, slotC_value[_edit_note_part]
+  SetKnobValue 9, slotC_value[_edit_note_part]
 
-  LabelKnob 10, {D: }, midi4_value[_edit_note_part]
-  SetKnobValue 10, midi4_value[_edit_note_part]
+  LabelKnob 10, {D: }, slotD_value[_edit_note_part]
+  SetKnobValue 10, slotD_value[_edit_note_part]
 
   LabelKnobs {⚠️ Voices for }, pad_edit_step, {:} , pad_edit_part, {  ⬆️ SHIFT to go back }
   LabelKnob 6, { }
@@ -1766,6 +1808,11 @@ Log {Hej }, nn
     LabelPad BTN_MIDI, {CC rec 🅾️}
   endif
 
+  LabelPad 1, { }
+  LabelPad 2, { }
+  LabelPad 3, { }
+  
+  LabelXY {A/B Pad}
 @End
 
 @GUI_PadEditMode
@@ -1885,8 +1932,10 @@ Log {Hej }, nn
     LabelKnob KNOB_RECMODE, {Trig ⚪️}
   elseif rec_mode = 4
     LabelKnob KNOB_RECMODE, {Transp ⚠️}
+  elseif rec_mode = 5
+    LabelKnob KNOB_RECMODE, {Pads}
   endif
-  SetKnobValue KNOB_RECMODE, (TranslateScale rec_mode, 0, 4, 0, 127)
+  SetKnobValue KNOB_RECMODE, (TranslateScale rec_mode, 0, 5, 0, 127)
 
   if currentDivisor = 0
     LabelKnob KNOB_STEP, {1/32}
@@ -1945,7 +1994,6 @@ Log {Hej }, nn
 
   LabelKnob KNOB_STRUM, {Strum}
   SetKnobValue KNOB_STRUM, (TranslateScale pattern_strum[active_pattern], 0, 200, 0, 127) 
- 
 
   LabelKnob 3, {A:CC }, pattern_CC_slot_map[active_pattern*midi_slots]
   SetKnobValue 3, pattern_CC_slot_map[active_pattern*midi_slots]
@@ -1955,6 +2003,10 @@ Log {Hej }, nn
   SetKnobValue 8, pattern_CC_slot_map[active_pattern*midi_slots + 2]
   LabelKnob 9, {D:CC }, pattern_CC_slot_map[active_pattern*midi_slots+3]
   SetKnobValue 9, pattern_CC_slot_map[active_pattern*midi_slots + 3]
+
+  LabelKnob 5, { }
+  LabelKnob 6, { }
+  LabelKnob 7, { }
 @End
 
 @GUI_LabelPadEditKnobs
