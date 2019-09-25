@@ -44,6 +44,7 @@
 @End
 
 @Onload
+
   SetShortName {Flow} 
   ShowLayout 2
   CurrentTimerTicks = 0
@@ -201,6 +202,12 @@
       endif
       seq_step = reset_step
     else
+      if uiMode = UIMODE_PADS
+        FlashPad step
+      else
+        FlashUserLed 
+      endif
+
       Inc seq_step
       if seq_step > 15
         seq_step = 0
@@ -390,7 +397,8 @@
     _rpttime = _gate / _rpts
     _rptdelay = _noteDelay
     for _i = 1 to _rpts
-      SendMIDINoteOn _ch, voice1[_note_part] + _transposeNote, _v, _rptdelay
+//            Log _i, {:}, _rpttime, {,}, _rptdelay
+      SendMIDINoteOn _ch, voice1[_note_part] + _transposeNote, _v, _rptdelay      
       SendMIDINoteOff _ch, voice1[_note_part] + _transposeNote, 0, _rpttime
       _rptdelay = _rptdelay + _rpttime          
     endfor
@@ -423,13 +431,10 @@
       if voice1[_note_part] >= 0
         if ((Random 1, 100) <= note_probability[_note_part])
           call @OnMetroPulse_notes
-        else
-          Log { Nope }
         endif
       endif
     endif
   endfor
-  FlashPad step
 
   if play <> NO
     Call @IncrementSequencer
@@ -554,11 +559,9 @@
 
   // Store part so that MidiNoteOff can reference all data of the note being played
   SetNoteState 0, nn, _note_part    
-log {MPE:},mode_pad_edit, { U_B:},UIMODE_BUTTONS, {uimode: }, uiMode
   if not mode_pad_edit
     if uiMode <> UIMODE_BUTTONS
       LabelPad _step, _poly_offset, {:}, (NoteName nn, YES) 
-Log {Hej }, nn
     endif
     LatchPad _step, 1
   endif
@@ -858,6 +861,11 @@ Log {Hej }, nn
       LabelPad pad, {Editing...} 
       Call @UpdateGUI
     endif
+  elseif uiMode = UIMODE_PADS_OPTIONS
+    if pad = BTN_MIDI
+      LabelPad BTN_MIDI, {✅Cleared}
+      Call @ClearActivePatternMidi
+    endif
   elseif uiMode = UIMODE_BUTTONS
     if pad = BTN_CLEAR_ALL
       LabelPad BTN_CLEAR_ALL, {✅Cleared}
@@ -865,9 +873,6 @@ Log {Hej }, nn
     elseif pad = BTN_CLEAR_ARMED
       LabelPad BTN_CLEAR_ARMED, {✅Cleared}
       Call @ClearActivePattern
-    elseif pad = BTN_MIDI
-      LabelPad BTN_MIDI, {✅Cleared}
-      Call @ClearActivePatternMidi
     elseif pad >= 8 and pad <= 14
       if mode_multi_pattern
         _pattern = pad - 8
@@ -1030,6 +1035,9 @@ Log {Hej }, nn
 ️  elseif pad = BTN_CLEAR_ARMED
     LabelPads {⚠️ Hold Clear Armed pad to clear current pattern ⚠️}
     LabelPad BTN_CLEAR_ALL, {️⚠️hold=clr}
+  
+  elseif pad = 1  // Track options
+    call @SetUIMode_Pads_Options
 
 //  elseif pad = BTN_RECORD
 //    record = not record
@@ -1085,7 +1093,7 @@ Log {Hej }, nn
 //  ╩  ╩ ╩═╩╝       ═╩╝╚═╝╚═╝╚═╝╩═╝╚═╝   ╩ ╩ ╩╩  
 
 @OnPadDoubleTap
-  if uiMode = UIMODE_BUTTONS
+  if uiMode = UIMODE_BUTTONS or uiMode = UIMODE_PADS_OPTIONS
     Exit
   endif
   if mode_pad_edit = 1 
@@ -1592,8 +1600,7 @@ Log {Hej }, nn
   FillArray slotA_value[_pattern_start], -1, sizeof_pattern
   FillArray slotB_value[_pattern_start], -1, sizeof_pattern
   FillArray slotC_value[_pattern_start], -1, sizeof_pattern
-  FillArray slotD_value[_pattern_start], -1, sizeof_pattern
-  FillArray pattern_CC_slot_map[active_pattern * midi_slots], -1, midi_slots
+  FillArray slotD_value[_pattern_start], -1, sizeof_pattern 
 @End
 
 //   ██████╗ ██╗   ██╗██╗
@@ -1861,31 +1868,12 @@ Log {Hej }, nn
     LatchPad po, 0
   endfor
   
-//  if transpose
-//    LabelPad BTN_TRANSPOSE, {⚠️Transp ON}
-//  else
-//    LabelPad BTN_TRANSPOSE, {Transp OFF}
-//  endif
-
   LabelPad BTN_CLEAR_ALL, {Clear all}
 
-//  if record
-//    LabelPad BTN_RECORD, {Live rec 🔴}
-//  else
-//    LabelPad BTN_RECORD, {Live rec ⚪}
-//  endif
-  
+  LabelPad 1, {Track options   (hold SHIFT)}
   LabelPad BTN_COPY_PATTERN, {Copy pattern}
   LabelPad BTN_CLEAR_ARMED, {Clear armed}
   LabelPad BTN_HELP, {ℹ️Help}
-
-//  if quantize = QUANT_NONE
-//    LabelPad BTN_QUANTIZE, {Quant: None} 
-//  elseif quantize = QUANT_PART
-//    LabelPad BTN_QUANTIZE, {Quant: Part} 
-//  else // QUANT_STEP
-//    LabelPad BTN_QUANTIZE, {Quant: Step} 
-//  endif
 
   if mode_multi_pattern  
     LabelPad BTN_MULTI_PATTERN, {Play: Multi}
