@@ -22,12 +22,14 @@
 // - Document what labels on pads actually mean
 // - Maybe: CC passthru (or is this always?), commit quantization (or should we have a non-destrucive quantization?), nudge pattern in pad options view
 // - In "pads" mode, show actual notes on pads (only first part of step will be relevant)
+// - Use "remaining step" pads for navigation when in pad edit mode. Voices, Midi, etc
+// - Use strum setting when playing live as well by keeping "strum offset" that is reset on each part
 
 
 // Change LabelPads below to name your patterns/tracks!
 @TrackLabels
   if active_pattern = 0
-    LabelPads {1-Track 1}
+//    LabelPads {1-Track 1}
   elseif active_pattern = 1
     LabelPads {2-Track 2}
   elseif active_pattern = 2
@@ -202,12 +204,6 @@
       endif
       seq_step = reset_step
     else
-      if uiMode = UIMODE_PADS
-        FlashPad step
-      else
-        FlashUserLed 
-      endif
-
       Inc seq_step
       if seq_step > 15
         seq_step = 0
@@ -418,6 +414,13 @@
     step = (step + 1) % 16
   endif
   note_part = (step * step_reso + step_part) // The note location in the wide grid
+
+  if uiMode = UIMODE_PADS
+    FlashPad step
+  else
+    FlashUserLed 
+  endif
+
 
   for _pattern = 0 to 6 
     if (mode_multi_pattern = 0 and active_pattern=_pattern) or (mode_multi_pattern = 1 and playing_patterns[_pattern] = YES)
